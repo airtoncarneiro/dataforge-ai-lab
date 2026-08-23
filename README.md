@@ -4,7 +4,7 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10`, o LLM Adapter `B11`, a Tutor Policy `B12`, o diagnóstico PROBE `B13` e a State Machine `B14` estão implementados. A geração/seleção de exercícios `B15` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
+A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10`, o LLM Adapter `B11`, a Tutor Policy `B12`, o diagnóstico PROBE `B13`, a State Machine `B14` e a geração/seleção de exercícios `B15` estão implementados. O Result Validator `B16` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
 
 ## Execução local no macOS / VS Code
 
@@ -54,7 +54,7 @@ Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:u
 
 O sandbox usa `SQL_MENTOR_SANDBOX_TIMEOUT_MS` e `SQL_MENTOR_SANDBOX_MAX_ROWS` para limitar cada consulta. A role da aplicação é fixa como `mentor_sandbox`; não configure o executor com a credencial administrativa.
 
-O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase, sem implementar o Orchestrator ou o loop de terminal. Para usar o provider real, configure `OPENAI_API_KEY`, `OPENAI_MODEL`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes usam exclusivamente o provider fake ou transporte HTTP simulado e não fazem chamadas reais.
+O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase, sem implementar o Orchestrator ou o loop de terminal. O Exercise Service B15 usa B11/B12 para geração estruturada, mas aplica localmente difficulty, pré-requisitos e validação de metadata; sua `reference_query` trusted nunca compõe o payload público do aluno e não é executada neste componente. Para usar o provider real, configure `OPENAI_API_KEY`, `OPENAI_MODEL`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes usam exclusivamente o provider fake ou transporte HTTP simulado e não fazem chamadas reais.
 
 Ao terminar:
 
