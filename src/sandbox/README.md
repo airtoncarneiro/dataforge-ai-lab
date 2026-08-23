@@ -1,4 +1,4 @@
-# SQL Sandbox — B04
+# SQL Sandbox — B04/B05
 
 O sandbox trata SQL do aluno como entrada hostil e permite somente consultas de leitura compatíveis com o dataset educacional.
 
@@ -14,6 +14,24 @@ O sandbox trata SQL do aluno como entrada hostil e permite somente consultas de 
 
 Regex participa apenas da classificação amigável de comandos que o parser não reconhece. Ela não concede permissão nem é usada como única barreira de segurança.
 
-## Limite desta entrega
+## Contrato de Execution Evidence
 
-O retorno contém a estrutura mínima de sucesso ou erro necessária a B04. Normalização completa de evidências, duração e SQLSTATE pertence a B05. `EXPLAIN` pertence a B06 e permanece bloqueado.
+Cada chamada retorna os mesmos campos, tanto em sucesso quanto em erro:
+
+```json
+{
+  "status": "ok",
+  "columns": ["customer_id"],
+  "rows": [{ "customer_id": 1 }],
+  "row_count": 1,
+  "truncated": false,
+  "duration_ms": 2.315,
+  "error": null
+}
+```
+
+Em falha, `error` contém somente `category`, `sqlstate` e mensagem sanitizada. O SQLSTATE é `null` quando não existe erro PostgreSQL correspondente; erros de sintaxe detectados antes do banco usam o código canônico `42601` sem executar a SQL do aluno.
+
+`duration_ms` mede, com relógio monotônico, a chamada completa do sandbox: política, aquisição/verificação da conexão, execução única da SQL e rollback. `row_count` representa a quantidade de linhas efetivamente devolvidas, não uma segunda contagem sobre o resultado completo.
+
+`EXPLAIN` pertence a B06 e permanece bloqueado.

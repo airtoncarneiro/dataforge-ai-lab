@@ -9,6 +9,23 @@ const sandbox = createSqlSandboxFromEnv({
   SQL_MENTOR_SANDBOX_MAX_ROWS: "3",
 });
 
+const RESULT_FIELDS = [
+  "status",
+  "columns",
+  "rows",
+  "row_count",
+  "truncated",
+  "duration_ms",
+  "error",
+];
+
+function assertNormalizedResult(result) {
+  assert.deepEqual(Object.keys(result), RESULT_FIELDS);
+  assert.equal(typeof result.duration_ms, "number");
+  assert.ok(Number.isFinite(result.duration_ms));
+  assert.ok(result.duration_ms >= 0);
+}
+
 after(async () => {
   await sandbox.close();
 });
@@ -22,7 +39,24 @@ test("executa SELECT válido exclusivamente como mentor_sandbox", async () => {
   assert.deepEqual(result.columns, ["role", "customer_id", "name"]);
   assert.equal(result.rows[0].role, "mentor_sandbox");
   assert.equal(result.rows[0].name, "Ana Souza");
+  assert.equal(result.row_count, 1);
+  assert.ok(result.duration_ms > 0);
   assert.equal(result.error, null);
+  assertNormalizedResult(result);
+});
+
+test("normaliza SELECT sem linhas", async () => {
+  const result = await sandbox.execute(
+    "SELECT customer_id, name FROM customers WHERE customer_id = -1",
+  );
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.columns, ["customer_id", "name"]);
+  assert.deepEqual(result.rows, []);
+  assert.equal(result.row_count, 0);
+  assert.equal(result.truncated, false);
+  assert.equal(result.error, null);
+  assertNormalizedResult(result);
 });
 
 test("executa SELECT com JOIN", async () => {
@@ -54,7 +88,10 @@ test("bloqueia acesso ao app_state", async () => {
 
   assert.equal(result.status, "error");
   assert.equal(result.error.category, "security_violation");
+  assert.equal(result.error.sqlstate, null);
   assert.doesNotMatch(result.error.message, /app_state|learning_sessions/u);
+  assert.doesNotMatch(JSON.stringify(result), /app_state|learning_sessions|stack|password/iu);
+  assertNormalizedResult(result);
 });
 
 test("bloqueia DML", async (context) => {
@@ -128,6 +165,8 @@ test("diferencia syntax error", async () => {
 
   assert.equal(result.status, "error");
   assert.equal(result.error.category, "syntax_error");
+  assert.equal(result.error.sqlstate, "42601");
+  assertNormalizedResult(result);
 });
 
 test("diferencia execution error sem expor detalhe interno", async () => {
@@ -135,7 +174,9 @@ test("diferencia execution error sem expor detalhe interno", async () => {
 
   assert.equal(result.status, "error");
   assert.equal(result.error.category, "execution_error");
+  assert.equal(result.error.sqlstate, "22012");
   assert.doesNotMatch(result.error.message, /division|stack|postgres/iu);
+  assertNormalizedResult(result);
 });
 
 test("interrompe query que excede statement_timeout", async () => {
@@ -145,6 +186,8 @@ test("interrompe query que excede statement_timeout", async () => {
 
   assert.equal(result.status, "error");
   assert.equal(result.error.category, "timeout");
+  assert.equal(result.error.sqlstate, "57014");
+  assertNormalizedResult(result);
 });
 
 test("limita e sinaliza resultado maior que o configurado", async () => {
@@ -157,8 +200,21 @@ test("limita e sinaliza resultado maior que o configurado", async () => {
 
   assert.equal(result.status, "ok");
   assert.equal(result.rows.length, 3);
-  assert.equal(result.rowCount, 3);
+  assert.equal(result.row_count, 3);
   assert.equal(result.truncated, true);
+  assertNormalizedResult(result);
+});
+
+test("não expõe stack trace, credenciais ou conexão no contrato", async () => {
+  const securityResult = await sandbox.execute("SELECT * FROM app_state.learning_sessions");
+  const executionResult = await sandbox.execute("SELECT 1 / 0 AS failure");
+  const serialized = JSON.stringify([securityResult, executionResult]);
+  const sandboxPassword = process.env.SQL_MENTOR_SANDBOX_PASSWORD;
+
+  assert.doesNotMatch(serialized, /stack|connectionstring|postgres:\/\//iu);
+  if (sandboxPassword) {
+    assert.ok(!serialized.includes(sandboxPassword));
+  }
 });
 
 test("dataset permanece íntegro depois das tentativas maliciosas", async () => {

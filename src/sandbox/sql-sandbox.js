@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+
 import pg from "pg";
 
 import { ERROR_CATEGORIES, SqlPolicy, SqlPolicyError } from "./sql-policy.js";
@@ -6,14 +8,31 @@ const { Pool } = pg;
 
 export const SANDBOX_ROLE = "mentor_sandbox";
 
-function errorResult(category, message) {
+function errorResult(category, message, sqlstate = null) {
   return {
     status: "error",
     columns: [],
     rows: [],
-    rowCount: 0,
+    row_count: 0,
     truncated: false,
-    error: { category, message },
+    error: { category, sqlstate, message },
+  };
+}
+
+function withDuration(result, startedAt, clock) {
+  const elapsed = clock() - startedAt;
+  const durationMs = Number.isFinite(elapsed)
+    ? Math.max(0, Number(elapsed.toFixed(3)))
+    : 0;
+
+  return {
+    status: result.status,
+    columns: result.columns,
+    rows: result.rows,
+    row_count: result.row_count,
+    truncated: result.truncated,
+    duration_ms: durationMs,
+    error: result.error,
   };
 }
 
@@ -31,29 +50,54 @@ function parsePositiveInteger(value, fallback, name, { min = 1, max = Number.MAX
 
 function mapError(error, timeoutMs) {
   if (error instanceof SqlPolicyError) {
-    return errorResult(error.category, error.message);
+    const sqlstate = error.category === ERROR_CATEGORIES.SYNTAX ? "42601" : null;
+    return errorResult(error.category, error.message, sqlstate);
   }
 
   if (error?.code === "57014") {
-    return errorResult(ERROR_CATEGORIES.TIMEOUT, `A consulta excedeu o tempo máximo de ${timeoutMs} ms.`);
+    return errorResult(
+      ERROR_CATEGORIES.TIMEOUT,
+      `A consulta excedeu o tempo máximo de ${timeoutMs} ms.`,
+      error.code,
+    );
   }
 
   if (error?.code === "42501" || error?.code === "25006") {
     return errorResult(
       ERROR_CATEGORIES.SECURITY,
       "A consulta viola a política de segurança do sandbox.",
+      error.code,
     );
   }
 
   if (error?.code === "42601") {
-    return errorResult(ERROR_CATEGORIES.SYNTAX, "A consulta possui sintaxe SQL inválida.");
+    return errorResult(
+      ERROR_CATEGORIES.SYNTAX,
+      "A consulta possui sintaxe SQL inválida.",
+      error.code,
+    );
   }
 
-  return errorResult(ERROR_CATEGORIES.EXECUTION, "A consulta não pôde ser executada.");
+  const sqlstate = typeof error?.severity === "string"
+    && typeof error?.code === "string"
+    && /^[0-9A-Z]{5}$/u.test(error.code)
+    ? error.code
+    : null;
+  return errorResult(
+    ERROR_CATEGORIES.EXECUTION,
+    "A consulta não pôde ser executada.",
+    sqlstate,
+  );
 }
 
 export class SqlSandbox {
-  constructor({ pool, policy = new SqlPolicy(), timeoutMs = 1_000, maxRows = 100 }) {
+  constructor({
+    pool,
+    policy = new SqlPolicy(),
+    timeoutMs = 1_000,
+    maxRows = 100,
+    clock = () => performance.now(),
+  }) {
     if (!pool || typeof pool.connect !== "function") {
       throw new Error("SqlSandbox requer um pool PostgreSQL válido.");
     }
@@ -63,19 +107,24 @@ export class SqlSandbox {
     if (!Number.isSafeInteger(maxRows) || maxRows < 1) {
       throw new Error("maxRows deve ser um inteiro positivo.");
     }
+    if (typeof clock !== "function") {
+      throw new Error("clock deve ser uma função.");
+    }
 
     this.pool = pool;
     this.policy = policy;
     this.timeoutMs = timeoutMs;
     this.maxRows = maxRows;
+    this.clock = clock;
   }
 
   async execute(sql) {
+    const startedAt = this.clock();
     let approved;
     try {
       approved = this.policy.validate(sql);
     } catch (error) {
-      return mapError(error, this.timeoutMs);
+      return withDuration(mapError(error, this.timeoutMs), startedAt, this.clock);
     }
 
     let client;
@@ -106,7 +155,7 @@ export class SqlSandbox {
         status: "ok",
         columns: result.fields.map((field) => field.name),
         rows,
-        rowCount: rows.length,
+        row_count: rows.length,
         truncated,
         error: null,
       };
@@ -125,7 +174,7 @@ export class SqlSandbox {
       client?.release(destroyClient);
     }
 
-    return output;
+    return withDuration(output, startedAt, this.clock);
   }
 
   async close() {

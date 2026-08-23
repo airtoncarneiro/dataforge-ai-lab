@@ -4,7 +4,7 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03` e o SQL Sandbox `B04` estão implementados: aplicação mínima de terminal, PostgreSQL local reproduzível, dataset educacional e execução controlada com a role read-only isolada do estado da aplicação. A normalização de Execution Evidence (`B05`), `EXPLAIN`, integração com LLM e fluxo pedagógico ainda não fazem parte desta entrega.
+A fundação `B01-B03`, o SQL Sandbox `B04` e a normalização de Execution Evidence `B05` estão implementados: aplicação mínima de terminal, PostgreSQL local reproduzível, dataset educacional e execução controlada com resultado estruturado. `EXPLAIN` (`B06`), integração com LLM e fluxo pedagógico ainda não fazem parte desta entrega.
 
 ## Execução local no macOS / VS Code
 
