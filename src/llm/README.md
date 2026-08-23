@@ -22,7 +22,7 @@ Sucesso estruturado:
   "status": "ok",
   "provider": "openai",
   "model": "configured-model",
-  "policy_version": "llm-adapter-contract-v1",
+  "policy_version": "tutor-policy-v0.1",
   "output": {},
   "tool_calls": [],
   "usage": {
@@ -45,7 +45,7 @@ Falha normalizada:
   "status": "error",
   "provider": "openai",
   "model": "configured-model",
-  "policy_version": "llm-adapter-contract-v1",
+  "policy_version": "tutor-policy-v0.1",
   "output": null,
   "tool_calls": [],
   "usage": null,
@@ -85,4 +85,4 @@ LLM_TOP_P=           # opcional
 
 `createLlmAdapterFromEnv()` valida a configuracao antes da primeira chamada. A API key permanece em campo privado do provider e nao aparece em `adapter.configuration` nem em erros normalizados.
 
-B12 ainda devera integrar e versionar a Tutor Policy; B11 nao carrega `docs/TUTOR_POLICY.md`, nao implementa PROBE, geracao de exercicios ou Orchestrator.
+B12 carrega e compoe a Tutor Policy fora do adapter, preservando a independencia de provider de B11. O adapter continua sem ler `docs/TUTOR_POLICY.md` diretamente e não implementa PROBE, geracao de exercicios ou Orchestrator.
