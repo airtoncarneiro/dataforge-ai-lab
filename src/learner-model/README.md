@@ -1,6 +1,5 @@
 # Learner Model
 
-Fronteira futura para estado pedagogico estruturado, persistivel e auditavel. A LLM fornecera evidencias; a aplicacao aplicara a politica de mastery.
+Os contratos estruturados e auditáveis do Learner Model foram introduzidos em B07 sob `src/domain/`. A LLM fornecerá `MasteryEvidence`; ela não define diretamente o valor final de mastery.
 
-B01 cria apenas esta fronteira. Modelos e politica de atualizacao pertencem a B07-B09.
-
+A política determinística/versionada de atualização pertence exclusivamente a B08. Esta fronteira ainda não calcula nem persiste mudanças.
