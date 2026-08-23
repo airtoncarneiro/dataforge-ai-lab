@@ -4,7 +4,7 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09` e o Adaptive Decision Service `B10` estão implementados. O LLM Adapter `B11`, a integração da Tutor Policy `B12` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
+A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10` e o LLM Adapter `B11` estão implementados. A integração da Tutor Policy `B12` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
 
 ## Execução local no macOS / VS Code
 
@@ -53,6 +53,8 @@ npm run test:integration
 Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:up`. Para reaplicar os scripts de inicialização em um volume vazio, use conscientemente `npm run db:reset`; esse comando remove somente o volume local deste Compose.
 
 O sandbox usa `SQL_MENTOR_SANDBOX_TIMEOUT_MS` e `SQL_MENTOR_SANDBOX_MAX_ROWS` para limitar cada consulta. A role da aplicação é fixa como `mentor_sandbox`; não configure o executor com a credencial administrativa.
+
+O LLM Adapter B11 permanece desacoplado do fluxo de terminal até B12 e tarefas posteriores. Para usá-lo programaticamente, configure `OPENAI_API_KEY`, `OPENAI_MODEL`, `LLM_POLICY_VERSION` e os limites `LLM_*` documentados em `.env.example`. Os testes usam exclusivamente o provider fake ou transporte HTTP simulado e não fazem chamadas reais.
 
 Ao terminar:
 
