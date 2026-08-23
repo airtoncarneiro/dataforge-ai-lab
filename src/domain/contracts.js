@@ -153,6 +153,56 @@ export function createFeedback(input, path = "Feedback") {
   });
 }
 
+export function createEvidenceSummary(input = {}, path = "EvidenceSummary") {
+  const value = contractInput(input, path, [
+    "positive_attempts",
+    "negative_attempts",
+    "consecutive_positive",
+    "consecutive_negative",
+  ]);
+  const positiveAttempts = nonNegativeInteger(
+    valueOrDefault(value, "positive_attempts", 0),
+    `${path}.positive_attempts`,
+  );
+  const negativeAttempts = nonNegativeInteger(
+    valueOrDefault(value, "negative_attempts", 0),
+    `${path}.negative_attempts`,
+  );
+  const consecutivePositive = nonNegativeInteger(
+    valueOrDefault(value, "consecutive_positive", 0),
+    `${path}.consecutive_positive`,
+  );
+  const consecutiveNegative = nonNegativeInteger(
+    valueOrDefault(value, "consecutive_negative", 0),
+    `${path}.consecutive_negative`,
+  );
+  if (consecutivePositive > positiveAttempts) {
+    throw new DomainValidationError(
+      `${path}.consecutive_positive`,
+      "não pode exceder positive_attempts",
+    );
+  }
+  if (consecutiveNegative > negativeAttempts) {
+    throw new DomainValidationError(
+      `${path}.consecutive_negative`,
+      "não pode exceder negative_attempts",
+    );
+  }
+  if (consecutivePositive > 0 && consecutiveNegative > 0) {
+    throw new DomainValidationError(
+      path,
+      "somente uma sequência positiva ou negativa pode estar ativa",
+    );
+  }
+
+  return deepFreeze({
+    positive_attempts: positiveAttempts,
+    negative_attempts: negativeAttempts,
+    consecutive_positive: consecutivePositive,
+    consecutive_negative: consecutiveNegative,
+  });
+}
+
 export function createConceptState(input, path = "ConceptState") {
   const value = contractInput(input, path, [
     "id",
@@ -161,6 +211,7 @@ export function createConceptState(input, path = "ConceptState") {
     "confidence",
     "misconceptions",
     "evidence_ids",
+    "evidence_summary",
     "created_at",
     "updated_at",
   ]);
@@ -198,6 +249,10 @@ export function createConceptState(input, path = "ConceptState") {
     evidence_ids: stringArray(
       valueOrDefault(value, "evidence_ids", []),
       `${path}.evidence_ids`,
+    ),
+    evidence_summary: createEvidenceSummary(
+      valueOrDefault(value, "evidence_summary", {}),
+      `${path}.evidence_summary`,
     ),
     created_at: createdAt,
     updated_at: updatedAt,
@@ -517,19 +572,32 @@ export function createMasteryChange(input, path = "MasteryChange") {
   const value = contractInput(input, path, [
     "id",
     "concept_state_id",
+    "evaluation_id",
     "attempt_id",
     "previous_mastery",
     "new_mastery",
     "previous_confidence",
     "new_confidence",
     "mastery_evidence_ids",
+    "evaluation_evidence_ids",
+    "reason",
     "policy_version",
     "changed_at",
   ]);
 
+  const masteryEvidenceIds = stringArray(
+    valueOrDefault(value, "mastery_evidence_ids", []),
+    `${path}.mastery_evidence_ids`,
+  );
+  const evaluationEvidenceIds = stringArray(
+    valueOrDefault(value, "evaluation_evidence_ids", []),
+    `${path}.evaluation_evidence_ids`,
+  );
+
   return deepFreeze({
     id: requiredString(value.id, `${path}.id`),
     concept_state_id: requiredString(value.concept_state_id, `${path}.concept_state_id`),
+    evaluation_id: requiredString(value.evaluation_id, `${path}.evaluation_id`),
     attempt_id: requiredString(value.attempt_id, `${path}.attempt_id`),
     previous_mastery: finiteNumber(value.previous_mastery, `${path}.previous_mastery`, {
       min: 0,
@@ -549,11 +617,9 @@ export function createMasteryChange(input, path = "MasteryChange") {
       CONFIDENCE_LEVELS,
       `${path}.new_confidence`,
     ),
-    mastery_evidence_ids: stringArray(
-      value.mastery_evidence_ids,
-      `${path}.mastery_evidence_ids`,
-      { min: 1 },
-    ),
+    mastery_evidence_ids: masteryEvidenceIds,
+    evaluation_evidence_ids: evaluationEvidenceIds,
+    reason: requiredString(value.reason, `${path}.reason`),
     policy_version: requiredString(value.policy_version, `${path}.policy_version`),
     changed_at: canonicalTimestamp(value.changed_at, `${path}.changed_at`),
   });

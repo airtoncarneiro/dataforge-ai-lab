@@ -78,6 +78,13 @@ export const FEEDBACK_SCHEMA = deepFreeze(strictObject({
   hints: stringArray,
 }));
 
+export const EVIDENCE_SUMMARY_SCHEMA = deepFreeze(strictObject({
+  positive_attempts: { type: "integer", minimum: 0 },
+  negative_attempts: { type: "integer", minimum: 0 },
+  consecutive_positive: { type: "integer", minimum: 0 },
+  consecutive_negative: { type: "integer", minimum: 0 },
+}));
+
 export const CONCEPT_STATE_SCHEMA = deepFreeze(strictObject({
   id: nonEmptyString,
   concept: nonEmptyString,
@@ -85,6 +92,7 @@ export const CONCEPT_STATE_SCHEMA = deepFreeze(strictObject({
   confidence: { type: "string", enum: [...CONFIDENCE_LEVELS] },
   misconceptions: { type: "array", items: MISCONCEPTION_SCHEMA },
   evidence_ids: stringArray,
+  evidence_summary: EVIDENCE_SUMMARY_SCHEMA,
   created_at: timestamp,
   updated_at: timestamp,
 }));
@@ -178,12 +186,15 @@ export const EVALUATION_SCHEMA = deepFreeze(strictObject({
 export const MASTERY_CHANGE_SCHEMA = deepFreeze(strictObject({
   id: nonEmptyString,
   concept_state_id: nonEmptyString,
+  evaluation_id: nonEmptyString,
   attempt_id: nonEmptyString,
   previous_mastery: mastery,
   new_mastery: mastery,
   previous_confidence: { type: "string", enum: [...CONFIDENCE_LEVELS] },
   new_confidence: { type: "string", enum: [...CONFIDENCE_LEVELS] },
-  mastery_evidence_ids: { ...stringArray, minItems: 1 },
+  mastery_evidence_ids: stringArray,
+  evaluation_evidence_ids: stringArray,
+  reason: nonEmptyString,
   policy_version: nonEmptyString,
   changed_at: timestamp,
 }));

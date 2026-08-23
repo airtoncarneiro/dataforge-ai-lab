@@ -226,12 +226,15 @@ test("cria MasteryChange sem calcular mastery", () => {
   const change = createMasteryChange({
     id: "mastery-change-1",
     concept_state_id: "concept-state-join-semantics",
+    evaluation_id: "evaluation-1",
     attempt_id: "attempt-1",
     previous_mastery: 0.45,
     new_mastery: 0.55,
     previous_confidence: "medium",
     new_confidence: "medium",
     mastery_evidence_ids: ["mastery-evidence-1"],
+    evaluation_evidence_ids: [],
+    reason: "Evidência positiva média aplicada pela política versionada.",
     policy_version: "not-applied-by-b07",
     changed_at: UPDATED_AT,
   });
@@ -345,8 +348,20 @@ test("aplica defaults explícitos e determinísticos", () => {
       confidence: concept.confidence,
       misconceptions: concept.misconceptions,
       evidence_ids: concept.evidence_ids,
+      evidence_summary: concept.evidence_summary,
     },
-    { mastery: 0, confidence: "low", misconceptions: [], evidence_ids: [] },
+    {
+      mastery: 0,
+      confidence: "low",
+      misconceptions: [],
+      evidence_ids: [],
+      evidence_summary: {
+        positive_attempts: 0,
+        negative_attempts: 0,
+        consecutive_positive: 0,
+        consecutive_negative: 0,
+      },
+    },
   );
   assert.equal(session.phase, "PROBE");
   assert.equal(session.current_exercise_id, null);

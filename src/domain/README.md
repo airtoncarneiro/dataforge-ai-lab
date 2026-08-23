@@ -7,7 +7,7 @@ Esta camada contém os contratos centrais compartilhados pelo Orchestrator, Eval
 | Contrato | Responsabilidade |
 | --- | --- |
 | `LearningSession` | Identificar objetivo, fase e referências ao estado/exercício atual. |
-| `ConceptState` | Representar mastery, confidence, misconceptions e evidências de um conceito. |
+| `ConceptState` | Representar mastery, confidence, misconceptions e resumo de evidências de um conceito. |
 | `LearnerState` | Agregar os estados conceituais de uma sessão. |
 | `Exercise` | Registrar conceitos-alvo, objetivo, dificuldade e estratégia de validação. |
 | `Attempt` | Registrar uma submissão imutável e sua relação com sessão/exercício. |
@@ -15,7 +15,7 @@ Esta camada contém os contratos centrais compartilhados pelo Orchestrator, Eval
 | `Assessment` | Separar correção, erro de execução, erros conceituais e evidências pedagógicas. |
 | `Evaluation` | Associar assessment, feedback, evidências de mastery e próxima ação a uma tentativa. |
 | `MasteryEvidence` | Sugerir direção e força de uma evidência, sem definir novo mastery. |
-| `MasteryChange` | Representar uma mudança já decidida por política externa e sua rastreabilidade. |
+| `MasteryChange` | Representar uma mudança decidida pela política versionada e sua rastreabilidade. |
 
 `Misconception`, `ConceptualError`, `EvaluationEvidence`, `EvidenceDetail`, `ExecutionError` e `Feedback` evitam campos booleanos ou texto sem contexto para informações que exigem estrutura.
 
@@ -34,7 +34,7 @@ const state = createConceptState({
 });
 ```
 
-O resultado inclui `mastery: 0`, `confidence: "low"`, `misconceptions: []` e `evidence_ids: []`. IDs e timestamps não são gerados implicitamente: o chamador deve fornecê-los para manter idempotência e auditabilidade. Timestamps usam a forma UTC canônica produzida por `Date.prototype.toISOString()`.
+O resultado inclui `mastery: 0`, `confidence: "low"`, `misconceptions: []`, `evidence_ids: []` e contadores zerados em `evidence_summary`. IDs e timestamps não são gerados implicitamente: o chamador deve fornecê-los para manter idempotência e auditabilidade. Timestamps usam a forma UTC canônica produzida por `Date.prototype.toISOString()`.
 
 ## Enums e invariantes
 
