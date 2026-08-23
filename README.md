@@ -4,7 +4,7 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03` está implementada: aplicação mínima de terminal, PostgreSQL local reproduzível, dataset educacional e role de sandbox read-only isolada do estado da aplicação. O executor SQL, a integração com LLM e o fluxo pedagógico ainda não fazem parte desta entrega.
+A fundação `B01-B03` e o SQL Sandbox `B04` estão implementados: aplicação mínima de terminal, PostgreSQL local reproduzível, dataset educacional e execução controlada com a role read-only isolada do estado da aplicação. A normalização de Execution Evidence (`B05`), `EXPLAIN`, integração com LLM e fluxo pedagógico ainda não fazem parte desta entrega.
 
 ## Execução local no macOS / VS Code
 
@@ -14,9 +14,10 @@ Pré-requisitos:
 - Docker Desktop ou Colima, com Docker Compose;
 - terminal integrado do VS Code aberto na raiz do repositório.
 
-Prepare as variáveis locais. O arquivo `.env` é ignorado pelo Git e não deve conter credenciais de produção:
+Instale as dependências e prepare as variáveis locais. O arquivo `.env` é ignorado pelo Git e não deve conter credenciais de produção:
 
 ```bash
+npm install
 cp .env.example .env
 ```
 
@@ -50,6 +51,8 @@ npm run test:integration
 ```
 
 Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:up`. Para reaplicar os scripts de inicialização em um volume vazio, use conscientemente `npm run db:reset`; esse comando remove somente o volume local deste Compose.
+
+O sandbox usa `SQL_MENTOR_SANDBOX_TIMEOUT_MS` e `SQL_MENTOR_SANDBOX_MAX_ROWS` para limitar cada consulta. A role da aplicação é fixa como `mentor_sandbox`; não configure o executor com a credencial administrativa.
 
 Ao terminar:
 
