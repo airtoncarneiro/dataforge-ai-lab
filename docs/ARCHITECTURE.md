@@ -67,7 +67,7 @@ Responsabilidade:
 - persistir eventos/estado;
 - aplicar transições válidas.
 
-O Orchestrator é a autoridade do workflow. A LLM recomenda a próxima ação dentro do contrato; a aplicação valida a transição.
+O Orchestrator é a autoridade do workflow. A LLM pode sugerir uma próxima ação dentro do contrato; o Adaptive Decision Service decide a ação pedagógica final e o Orchestrator valida/aplica a transição.
 
 ### 3. LLM Adapter
 
@@ -94,7 +94,20 @@ Responsabilidade:
 
 A LLM não grava diretamente o valor final de mastery.
 
-### 5. Exercise Service
+### 5. Adaptive Decision Service
+
+Responsabilidade:
+
+- receber `LearnerState` atualizado, `Evaluation`, conceito atual e Knowledge Graph;
+- distinguir falha técnica de erro conceitual;
+- decidir deterministicamente entre `retry`, `reteach`, `practice`, `advance` e `review`;
+- impedir avanço para conceito com pré-requisitos não satisfeitos;
+- retornar decisão estruturada, justificável e versionada;
+- não alterar mastery/confidence nem gerar conteúdo pedagógico.
+
+O Adaptive Decision Service é a autoridade da decisão pedagógica imediata após a avaliação. O Orchestrator continua sendo a autoridade da fase e pode rejeitar uma transição incompatível com o workflow.
+
+### 6. Exercise Service
 
 Responsabilidade:
 
@@ -106,7 +119,7 @@ Responsabilidade:
 
 Exercícios podem inicialmente ser gerados pela LLM, curados estaticamente ou híbridos. O contrato deve permitir evolução.
 
-### 6. Evaluator
+### 7. Evaluator
 
 Responsabilidade:
 
@@ -129,7 +142,7 @@ Exemplos de julgamento pedagógico:
 - conceito pré-requisito a revisar;
 - próxima ação sugerida.
 
-### 7. SQL Sandbox
+### 8. SQL Sandbox
 
 Responsabilidade:
 
@@ -156,7 +169,7 @@ timeout/resource limits
 schema isolation
 ```
 
-### 8. PostgreSQL Educacional
+### 9. PostgreSQL Educacional
 
 Contém somente objetos necessários aos exercícios.
 
@@ -167,7 +180,7 @@ Não deve expor:
 - estado interno do tutor;
 - tabelas administrativas da aplicação.
 
-### 9. State Storage
+### 10. State Storage
 
 Pode começar simples, inclusive no próprio PostgreSQL, desde que seja logicamente/permissionamente isolado do usuário de sandbox.
 
@@ -202,9 +215,11 @@ LLM retorna Assessment estruturado
     ↓
 Learner Model Service calcula mudança
     ↓
+Adaptive Decision Service decide próxima ação
+    ↓
 Persistência
     ↓
-Orchestrator escolhe próxima transição
+Orchestrator valida/aplica a transição
     ↓
 Tutor responde ao aluno
 ```

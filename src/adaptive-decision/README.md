@@ -4,7 +4,7 @@ Este módulo implementa `adaptive-policy-v1`, uma política determinística que 
 
 O `next_action` sugerido dentro de `Evaluation` não é autoridade para a decisão. A política o valida como parte do contrato de B07, mas calcula a ação usando o estado objetivo e as evidências estruturadas.
 
-> Nota de escopo: o backlog versionado ainda descreve B10 como LLM Adapter. Esta implementação segue a instrução explícita desta entrega para um decisor adaptativo e não contém integração com LLM.
+Este componente corresponde oficialmente a B10 — Adaptive Decision Service. A integração com LLM começa em B11 — LLM Adapter e não faz parte deste módulo.
 
 ## Contrato de entrada
 

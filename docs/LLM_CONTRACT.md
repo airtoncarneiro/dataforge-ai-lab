@@ -73,7 +73,7 @@ transfer_test
 complete
 ```
 
-O Orchestrator deve rejeitar transições impossíveis para a fase atual.
+`next_action` é uma sugestão estruturada, não a autoridade final. O Adaptive Decision Service B10 combina a avaliação com o `LearnerState` atualizado e o Knowledge Graph para decidir a ação pedagógica. O Orchestrator deve rejeitar transições impossíveis para a fase atual.
 
 ## Evidência de mastery
 
@@ -288,6 +288,7 @@ model/provider
 prompt/policy version
 evaluator version
 mastery policy version
+adaptive decision policy version
 ```
 
 Isso permite comparar comportamento quando prompts ou modelos mudarem.

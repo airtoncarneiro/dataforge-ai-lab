@@ -4,7 +4,7 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09` e a política determinística de decisão adaptativa solicitada nesta entrega estão implementados. O LLM Adapter descrito como `B10` no backlog, a integração da Tutor Policy `B11` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
+A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09` e o Adaptive Decision Service `B10` estão implementados. O LLM Adapter `B11`, a integração da Tutor Policy `B12` e o fluxo pedagógico posterior ainda não fazem parte desta entrega.
 
 ## Execução local no macOS / VS Code
 
