@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/cli.js",
+    "demo": "node src/cli.js --demo",
     "test": "node --test tests/unit/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "test:all": "npm test && npm run test:integration",

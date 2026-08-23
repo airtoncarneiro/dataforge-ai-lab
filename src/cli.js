@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
-import { createInterface } from "node:readline";
 import process from "node:process";
+
+import { createTutorApplicationFromEnv } from "./orchestrator/index.js";
+import { NodeTerminalIO, TerminalConversationLoop } from "./terminal/index.js";
 
 export const VERSION = "0.1.0";
 
@@ -10,62 +12,74 @@ export function helpText() {
     "SQL Mentor AI",
     "",
     "Uso:",
-    "  npm start              inicia a aplicacao de terminal",
+    "  npm start              inicia com o provider configurado",
+    "  npm run demo           inicia sem chamadas reais à LLM",
     "  npm start -- --help     mostra esta ajuda",
-    "  npm start -- --version  mostra a versao",
+    "  npm start -- --version  mostra a versão",
+    "",
+    "SQL multilinha: finalize a submissão com .enviar em uma linha separada.",
   ].join("\n");
 }
 
-export function foundationStatus() {
+export function foundationStatus({ demo = false } = {}) {
   return [
-    "SQL Mentor AI — fundacao B01-B03",
-    "PostgreSQL educacional: configurado via Docker Compose.",
-    "Fluxo pedagogico: sera implementado a partir de B04.",
+    "SQL Mentor AI — Terminal conversation loop B18",
+    demo
+      ? "LLM: provider demo determinístico (sem rede)."
+      : "LLM: provider configurado pelo ambiente.",
+    "SQL: execução real exclusivamente pelo Sandbox PostgreSQL.",
+    "Estado: mantido somente em memória nesta versão.",
   ].join("\n");
 }
 
-export function runCli({ input = process.stdin, output = process.stdout, args = process.argv.slice(2) } = {}) {
+export async function runCli({
+  input = process.stdin,
+  output = process.stdout,
+  args = process.argv.slice(2),
+  env = process.env,
+  applicationFactory = createTutorApplicationFromEnv,
+  ioFactory = (options) => new NodeTerminalIO(options),
+  loopFactory = (options) => new TerminalConversationLoop(options),
+  loadLocalEnv = env === process.env,
+} = {}) {
   if (args.includes("--help") || args.includes("-h")) {
     output.write(`${helpText()}\n`);
-    return;
+    return Object.freeze({ reason: "help", session: null });
   }
-
   if (args.includes("--version") || args.includes("-v")) {
     output.write(`${VERSION}\n`);
-    return;
+    return Object.freeze({ reason: "version", session: null });
   }
 
-  output.write(`${foundationStatus()}\n`);
-
-  if (!input.isTTY) {
-    return;
+  if (loadLocalEnv && typeof process.loadEnvFile === "function") {
+    try {
+      process.loadEnvFile(".env");
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        output.write("[ERRO] O arquivo .env local não pôde ser carregado.\n");
+        return Object.freeze({ reason: "configuration_error", session: null });
+      }
+    }
   }
 
-  output.write("Digite 'status' para rever o estado ou 'sair' para encerrar.\n");
-  const terminal = createInterface({ input, output, prompt: "sql-mentor> " });
-  terminal.prompt();
-
-  terminal.on("line", (line) => {
-    const command = line.trim().toLowerCase();
-
-    if (command === "sair" || command === "exit" || command === "quit") {
-      terminal.close();
-      return;
-    }
-
-    if (command === "status") {
-      output.write(`${foundationStatus()}\n`);
-    } else if (command) {
-      output.write("Comando ainda nao disponivel nesta fundacao.\n");
-    }
-
-    terminal.prompt();
-  });
+  const demo = args.includes("--demo");
+  output.write(`${foundationStatus({ demo })}\n`);
+  try {
+    const application = await applicationFactory({ env, demo });
+    const io = ioFactory({ input, output });
+    return await loopFactory({ application, io }).run();
+  } catch {
+    output.write("[ERRO] Não foi possível iniciar a sessão. Verifique a configuração local.\n");
+    return Object.freeze({ reason: "configuration_error", session: null });
+  }
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href;
+const invokedDirectly = process.argv[1]
+  && import.meta.url === new URL(process.argv[1], "file:").href;
 
 if (invokedDirectly) {
-  runCli();
+  const result = await runCli();
+  if (["configuration_error", "application_error"].includes(result.reason)) {
+    process.exitCode = 1;
+  }
 }
-

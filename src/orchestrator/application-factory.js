@@ -1,0 +1,97 @@
+import { AdaptiveDecisionService } from "../adaptive-decision/index.js";
+import { EvaluatorService } from "../evaluator/index.js";
+import { ExerciseService } from "../exercise/index.js";
+import { SQL_KNOWLEDGE_GRAPH } from "../knowledge-graph/index.js";
+import { LearnerModelService } from "../learner-model/index.js";
+import {
+  DemoLlmProvider,
+  LlmAdapter,
+  createLlmAdapterFromEnv,
+} from "../llm/index.js";
+import { ProbeService } from "../probe/index.js";
+import { ResultValidator } from "../result-validator/index.js";
+import { createSqlSandboxFromEnv } from "../sandbox/sql-sandbox.js";
+import { LearningStateMachine } from "../state-machine/index.js";
+import {
+  TUTOR_POLICY_VERSION,
+  createTutorPolicyContextBuilder,
+} from "../tutor-policy/index.js";
+import { TutorApplication } from "./tutor-application.js";
+import { TutorPhaseService } from "./tutor-phase-service.js";
+
+function integer(value, fallback, { min, max }) {
+  if (value === undefined || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+    throw new TypeError(`Configuração deve ser inteiro entre ${min} e ${max}.`);
+  }
+  return parsed;
+}
+
+function difficulty(value) {
+  const normalized = value?.trim().toLowerCase() || "medium";
+  if (!["low", "medium", "high"].includes(normalized)) {
+    throw new TypeError("SQL_MENTOR_TARGET_DIFFICULTY deve ser low, medium ou high.");
+  }
+  return normalized;
+}
+
+function createDemoAdapter() {
+  return new LlmAdapter({
+    provider: new DemoLlmProvider(),
+    policyVersion: TUTOR_POLICY_VERSION,
+    timeoutMs: 1_000,
+    maxRetries: 0,
+    parameters: { temperature: 0 },
+  });
+}
+
+export async function createTutorApplicationFromEnv({
+  env = process.env,
+  demo = false,
+  clock = () => new Date().toISOString(),
+} = {}) {
+  const knowledgeGraph = SQL_KNOWLEDGE_GRAPH;
+  const learnerModel = new LearnerModelService();
+  const adapter = demo ? createDemoAdapter() : createLlmAdapterFromEnv(env);
+  const policyBuilder = await createTutorPolicyContextBuilder();
+  const sandbox = createSqlSandboxFromEnv(env);
+  const stateMachine = new LearningStateMachine({ clock });
+
+  return new TutorApplication({
+    probeService: new ProbeService({
+      adapter,
+      policyBuilder,
+      knowledgeGraph,
+      learnerModel,
+      clock,
+    }),
+    phaseService: new TutorPhaseService({ adapter, policyBuilder, knowledgeGraph }),
+    exerciseService: new ExerciseService({
+      adapter,
+      policyBuilder,
+      knowledgeGraph,
+      clock,
+    }),
+    resultValidator: new ResultValidator({ sandbox }),
+    evaluator: new EvaluatorService({
+      adapter,
+      policyBuilder,
+      knowledgeGraph,
+      clock,
+    }),
+    learnerModel,
+    decisionService: new AdaptiveDecisionService(),
+    stateMachine,
+    knowledgeGraph,
+    clock,
+    closeResource: () => sandbox.close(),
+    probeTargetConcepts: demo ? ["select"] : undefined,
+    maxProbeQuestions: integer(
+      env.SQL_MENTOR_PROBE_MAX_QUESTIONS,
+      demo ? 5 : 8,
+      { min: 5, max: 12 },
+    ),
+    targetDifficulty: difficulty(env.SQL_MENTOR_TARGET_DIFFICULTY),
+  });
+}

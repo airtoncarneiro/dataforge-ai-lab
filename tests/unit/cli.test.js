@@ -12,33 +12,59 @@ function captureOutput() {
       callback();
     },
   });
-
   return { stream, value: () => value };
 }
 
-test("exibe ajuda sem iniciar o loop interativo", () => {
+test("exibe ajuda sem iniciar o loop interativo", async () => {
   const output = captureOutput();
-
-  runCli({ args: ["--help"], output: output.stream, input: { isTTY: false } });
-
+  let factoryCalled = false;
+  await runCli({
+    args: ["--help"], output: output.stream, input: {}, loadLocalEnv: false,
+    applicationFactory: async () => { factoryCalled = true; },
+  });
   assert.equal(output.value(), `${helpText()}\n`);
-  assert.match(output.value(), /npm start/);
+  assert.match(output.value(), /npm run demo/);
+  assert.equal(factoryCalled, false);
 });
 
-test("exibe a versao", () => {
+test("exibe a versão", async () => {
   const output = captureOutput();
-
-  runCli({ args: ["--version"], output: output.stream, input: { isTTY: false } });
-
+  await runCli({ args: ["--version"], output: output.stream, input: {}, loadLocalEnv: false });
   assert.equal(output.value(), `${VERSION}\n`);
 });
 
-test("inicia em modo nao interativo e informa o limite da fundacao", () => {
+test("inicia B18 e propaga explicitamente o modo demo", async () => {
   const output = captureOutput();
-
-  runCli({ args: [], output: output.stream, input: { isTTY: false } });
-
-  assert.equal(output.value(), `${foundationStatus()}\n`);
-  assert.match(output.value(), /B01-B03/);
+  const calls = [];
+  const result = await runCli({
+    args: ["--demo"], env: {}, output: output.stream, input: {}, loadLocalEnv: false,
+    applicationFactory: async (options) => {
+      calls.push(["factory", options.demo]);
+      return { id: "application" };
+    },
+    ioFactory: () => ({ id: "io" }),
+    loopFactory: ({ application, io }) => ({
+      async run() {
+        calls.push(["loop", application.id, io.id]);
+        return { reason: "manual_exit", session: null };
+      },
+    }),
+  });
+  assert.equal(result.reason, "manual_exit");
+  assert.deepEqual(calls, [["factory", true], ["loop", "application", "io"]]);
+  assert.equal(output.value(), `${foundationStatus({ demo: true })}\n`);
+  assert.match(output.value(), /B18/);
 });
 
+test("falha de configuração é sanitizada", async () => {
+  const output = captureOutput();
+  const result = await runCli({
+    args: [], env: {}, output: output.stream, input: {}, loadLocalEnv: false,
+    applicationFactory: async () => {
+      throw new Error("postgres://mentor_sandbox:secret@internal/database");
+    },
+  });
+  assert.equal(result.reason, "configuration_error");
+  assert.doesNotMatch(output.value(), /secret|postgres:\/\//iu);
+  assert.match(output.value(), /configuração local/iu);
+});
