@@ -15,3 +15,10 @@ Demo determinística sem chamada à LLM, ainda usando o PostgreSQL real:
 ```bash
 npm run demo
 ```
+
+Com B19 e PostgreSQL configurado, uma sessão persistida pode ser retomada sem
+reexecutar tentativas já gravadas:
+
+```bash
+npm start -- --resume <sessionId>
+```

@@ -11,6 +11,7 @@ import {
   createTrustedCurrentExercise,
   createTutorApplicationSession,
 } from "./contracts.js";
+import { assertStore } from "../persistence/contracts.js";
 
 const EXITABLE_SESSION_STATUSES = new Set(["active", "error"]);
 
@@ -192,6 +193,9 @@ export class TutorApplication {
   #probeTargetConcepts;
   #maxProbeQuestions;
   #targetDifficulty;
+  #sessionStore;
+  #sessionPersisted = false;
+  #closed = false;
   #session = null;
 
   constructor({
@@ -209,6 +213,7 @@ export class TutorApplication {
     probeTargetConcepts,
     maxProbeQuestions = 8,
     targetDifficulty = "medium",
+    sessionStore = null,
   }) {
     const requirements = [
       [probeService, ["start", "submitAnswer"], "ProbeService B13"],
@@ -257,10 +262,28 @@ export class TutorApplication {
     this.#probeTargetConcepts = probeTargetConcepts;
     this.#maxProbeQuestions = maxProbeQuestions;
     this.#targetDifficulty = targetDifficulty;
+    this.#sessionStore = sessionStore === null ? null : assertStore(sessionStore);
   }
 
   get session() {
     return this.#session;
+  }
+
+  async resume(sessionId) {
+    if (this.#session !== null) fail("session_exists", "Já existe uma sessão em memória.");
+    if (this.#sessionStore === null) {
+      fail("persistence_unavailable", "Não existe store configurado para retomar a sessão.");
+    }
+    const id = string(sessionId, "sessionId");
+    this.#session = createTutorApplicationSession(
+      await this.#sessionStore.loadSessionSnapshot(id),
+    );
+    this.#sessionPersisted = true;
+    return createApplicationResult(this.#session, [createApplicationEvent("session_resumed", {
+      session_id: this.#session.id,
+      phase: this.#session.flow_state.phase,
+      message: "Sessão recuperada do estado persistido.",
+    })]);
   }
 
   async start({ learningGoal }) {
@@ -314,6 +337,7 @@ export class TutorApplication {
       return this.#applyProbeFailure(probe, events);
     }
     events.push(probeQuestionEvent(probe));
+    await this.#persist();
     return createApplicationResult(this.#session, events);
   }
 
@@ -340,6 +364,7 @@ export class TutorApplication {
     });
     if (probe.status === "error") return this.#applyProbeFailure(probe, []);
     if (probe.status === "active") {
+      await this.#persist();
       return createApplicationResult(this.#session, [probeQuestionEvent(probe)]);
     }
 
@@ -356,6 +381,7 @@ export class TutorApplication {
       flow_state: flowState,
       updated_at: probe.updated_at,
     });
+    await this.#persist();
     return createApplicationResult(this.#session, [
       probeCompletedEvent(probe),
       progressEvent(probe.learner_state, flowState.current_concept),
@@ -384,7 +410,7 @@ export class TutorApplication {
           focus_concepts: result.output.focus_concepts,
           rationale: result.output.sequence_rationale,
         }));
-        this.#transition("plan_ready", "Plano pedagógico apresentado.");
+        await this.#transition("plan_ready", "Plano pedagógico apresentado.");
         continue;
       }
       if (phase === "TEACH") {
@@ -403,7 +429,7 @@ export class TutorApplication {
           concepts: result.output.concepts,
           comprehension_check: result.output.comprehension_check,
         }));
-        this.#transition("teaching_completed", "Etapa de ensino apresentada.");
+        await this.#transition("teaching_completed", "Etapa de ensino apresentada.");
         continue;
       }
       if (phase === "REVIEW") {
@@ -411,7 +437,7 @@ export class TutorApplication {
           message: "B10 solicitou REVIEW. B18 preserva a transição e retorna à prática; o agendamento cumulativo pertence a B22.",
           current_concept: currentConcept,
         }));
-        this.#transition("review_completed", "Placeholder seguro de REVIEW concluído em B18.");
+        await this.#transition("review_completed", "Placeholder seguro de REVIEW concluído em B18.");
         continue;
       }
       if (["APPLY", "TRANSFER_TEST"].includes(phase)) {
@@ -482,6 +508,7 @@ export class TutorApplication {
           current_exercise: trusted,
           updated_at: at,
         });
+        await this.#persist();
         events.push(publicExerciseEvent(trusted));
         return createApplicationResult(this.#session, events);
       }
@@ -581,6 +608,7 @@ export class TutorApplication {
         mastery_changes: [...this.#session.mastery_changes, ...update.mastery_changes],
         updated_at: evaluatedAt,
       });
+      await this.#persist();
       return createApplicationResult(this.#session, [
         executionEvent(validation, evaluatorResult),
         feedbackEvent(evaluatorResult),
@@ -592,7 +620,7 @@ export class TutorApplication {
     }
   }
 
-  endSession(reason = "manual_exit") {
+  async endSession(reason = "manual_exit") {
     if (this.#session === null) return null;
     if (!EXITABLE_SESSION_STATUSES.has(this.#session.status)) {
       return createApplicationResult(this.#session, []);
@@ -603,19 +631,22 @@ export class TutorApplication {
       status: "ended",
       updated_at: at,
     });
+    await this.#persist();
     return createApplicationResult(this.#session, [
       createApplicationEvent("session_ended", {
         reason,
-        message: "Sessão encerrada. O estado desta versão existia somente em memória.",
+        message: "Sessão encerrada. O estado pode ser retomado pela persistência configurada.",
       }),
     ]);
   }
 
   async close() {
+    if (this.#closed) return;
+    this.#closed = true;
     if (this.#closeResource !== null) await this.#closeResource();
   }
 
-  #transition(event, reason) {
+  async #transition(event, reason) {
     const at = timestamp(this.#clock);
     const flowState = this.#stateMachine.transition(this.#session.flow_state, event, {
       reason,
@@ -629,6 +660,7 @@ export class TutorApplication {
         : this.#session.current_exercise,
       updated_at: at,
     });
+    await this.#persist();
   }
 
   #requireActiveSession() {
@@ -643,7 +675,7 @@ export class TutorApplication {
     }
   }
 
-  #applyProbeFailure(probe, events) {
+  async #applyProbeFailure(probe, events) {
     const flowState = this.#stateMachine.applyProbeSession(
       this.#session.flow_state,
       probe,
@@ -661,10 +693,11 @@ export class TutorApplication {
       message: probe.error.message,
       retryable: flowState.error.retryable,
     }));
+    await this.#persist();
     return createApplicationResult(this.#session, events);
   }
 
-  #failSession(error, failedEvent, events, at) {
+  async #failSession(error, failedEvent, events, at) {
     const safe = publicError(error, {
       message: "O fluxo encontrou uma falha interna sanitizada.",
       retryable: false,
@@ -689,6 +722,17 @@ export class TutorApplication {
       updated_at: at,
     });
     events.push(createApplicationEvent("error", safe));
+    await this.#persist();
     return createApplicationResult(this.#session, events);
+  }
+
+  async #persist() {
+    if (this.#sessionStore === null) return;
+    if (!this.#sessionPersisted) {
+      await this.#sessionStore.createSession(this.#session);
+      this.#sessionPersisted = true;
+      return;
+    }
+    await this.#sessionStore.saveSessionSnapshot(this.#session);
   }
 }

@@ -14,6 +14,7 @@ export function helpText() {
     "Uso:",
     "  npm start              inicia com o provider configurado",
     "  npm run demo           inicia sem chamadas reais à LLM",
+    "  npm start -- --resume <sessionId>  retoma uma sessão persistida",
     "  npm start -- --help     mostra esta ajuda",
     "  npm start -- --version  mostra a versão",
     "",
@@ -28,7 +29,7 @@ export function foundationStatus({ demo = false } = {}) {
       ? "LLM: provider demo determinístico (sem rede)."
       : "LLM: provider configurado pelo ambiente.",
     "SQL: execução real exclusivamente pelo Sandbox PostgreSQL.",
-    "Estado: mantido somente em memória nesta versão.",
+    "Estado: persistido em PostgreSQL quando a configuração B19 está disponível.",
   ].join("\n");
 }
 
@@ -63,11 +64,17 @@ export async function runCli({
   }
 
   const demo = args.includes("--demo");
+  const resumeIndex = args.indexOf("--resume");
+  const resumeSessionId = resumeIndex < 0 ? null : args[resumeIndex + 1] ?? null;
+  if (resumeIndex >= 0 && (typeof resumeSessionId !== "string" || resumeSessionId.trim() === "")) {
+    output.write("[ERRO] --resume exige um sessionId.\n");
+    return Object.freeze({ reason: "configuration_error", session: null });
+  }
   output.write(`${foundationStatus({ demo })}\n`);
   try {
     const application = await applicationFactory({ env, demo });
     const io = ioFactory({ input, output });
-    return await loopFactory({ application, io }).run();
+    return await loopFactory({ application, io }).run({ resumeSessionId });
   } catch {
     output.write("[ERRO] Não foi possível iniciar a sessão. Verifique a configuração local.\n");
     return Object.freeze({ reason: "configuration_error", session: null });

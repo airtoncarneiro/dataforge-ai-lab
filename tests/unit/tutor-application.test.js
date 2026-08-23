@@ -9,6 +9,7 @@ import { SQL_KNOWLEDGE_GRAPH } from "../../src/knowledge-graph/index.js";
 import { LearnerModelService } from "../../src/learner-model/index.js";
 import { DemoLlmProvider, FakeLlmProvider, LlmAdapter } from "../../src/llm/index.js";
 import { TutorApplication, TutorPhaseService } from "../../src/orchestrator/index.js";
+import { IdempotencyConflictError, InMemorySessionStore } from "../../src/persistence/index.js";
 import { ProbeService } from "../../src/probe/index.js";
 import {
   RESULT_VALIDATOR_POLICY_VERSION,
@@ -66,7 +67,7 @@ function correctValidation() {
   });
 }
 
-async function applicationHarness({ provider = new DemoLlmProvider() } = {}) {
+async function applicationHarness({ provider = new DemoLlmProvider(), sessionStore = null } = {}) {
   const now = clock();
   const adapter = new LlmAdapter({
     provider,
@@ -144,6 +145,7 @@ async function applicationHarness({ provider = new DemoLlmProvider() } = {}) {
     probeTargetConcepts: ["select"],
     maxProbeQuestions: 5,
     targetDifficulty: "medium",
+    sessionStore,
   });
   return { app, calls, provider };
 }
@@ -238,6 +240,34 @@ test("sessão completa funciona com FakeLlmProvider roteirizado", async () => {
   assert.equal(evaluated.session.attempt_count, 1);
   assert.equal(evaluated.events.find((item) => item.type === "feedback").data.correct, true);
   assert.equal(fake.callCount, scenarios.length);
+});
+
+test("B19 recupera sessão completa sem reaplicar Evaluation ou MasteryChange", async () => {
+  const store = new InMemorySessionStore();
+  const first = await applicationHarness({ sessionStore: store });
+  await reachExercise(first.app);
+  await first.app.submitSql("SELECT customer_id, name FROM customers ORDER BY customer_id");
+  const before = first.app.session;
+  await store.saveSessionSnapshot(before);
+
+  const restarted = await applicationHarness({ sessionStore: store });
+  const recovered = await restarted.app.resume(before.id);
+  assert.equal(recovered.session.id, before.id);
+  assert.equal(restarted.app.session.evaluations.length, 1);
+  assert.equal(restarted.app.session.mastery_changes.length, before.mastery_changes.length);
+  assert.equal(restarted.app.session.updated_at, before.updated_at);
+  assert.equal(restarted.app.session.flow_state.policy_version, before.flow_state.policy_version);
+
+  await store.saveEvaluation(before.id, before.evaluations[0]);
+  await store.saveMasteryChanges(before.id, before.mastery_changes);
+  assert.equal((await store.loadSessionSnapshot(before.id)).mastery_changes.length,
+    before.mastery_changes.length);
+
+  const conflictingAttempt = { ...before.attempts[0], submission: "SELECT 999" };
+  await assert.rejects(
+    store.saveAttempt(before.id, conflictingAttempt),
+    IdempotencyConflictError,
+  );
 });
 
 test("coordenador não duplica cálculo de mastery nem importa acesso PostgreSQL direto", async () => {

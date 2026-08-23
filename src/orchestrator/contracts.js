@@ -23,6 +23,7 @@ export const TERMINAL_SESSION_STATUSES = Object.freeze([
 
 export const APPLICATION_EVENT_TYPES = Object.freeze([
   "welcome",
+  "session_resumed",
   "probe_question",
   "probe_completed",
   "plan",

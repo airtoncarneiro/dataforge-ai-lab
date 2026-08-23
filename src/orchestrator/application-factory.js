@@ -9,6 +9,7 @@ import {
   createLlmAdapterFromEnv,
 } from "../llm/index.js";
 import { ProbeService } from "../probe/index.js";
+import { createPostgresSessionStoreFromEnv } from "../persistence/index.js";
 import { ResultValidator } from "../result-validator/index.js";
 import { createSqlSandboxFromEnv } from "../sandbox/sql-sandbox.js";
 import { LearningStateMachine } from "../state-machine/index.js";
@@ -56,6 +57,7 @@ export async function createTutorApplicationFromEnv({
   const adapter = demo ? createDemoAdapter() : createLlmAdapterFromEnv(env);
   const policyBuilder = await createTutorPolicyContextBuilder();
   const sandbox = createSqlSandboxFromEnv(env);
+  const sessionStore = createPostgresSessionStoreFromEnv(env);
   const stateMachine = new LearningStateMachine({ clock });
 
   return new TutorApplication({
@@ -85,7 +87,10 @@ export async function createTutorApplicationFromEnv({
     stateMachine,
     knowledgeGraph,
     clock,
-    closeResource: () => sandbox.close(),
+    closeResource: async () => {
+      await Promise.all([sandbox.close(), sessionStore.close()]);
+    },
+    sessionStore,
     probeTargetConcepts: demo ? ["select"] : undefined,
     maxProbeQuestions: integer(
       env.SQL_MENTOR_PROBE_MAX_QUESTIONS,

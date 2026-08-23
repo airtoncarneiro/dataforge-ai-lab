@@ -55,26 +55,31 @@ export class TerminalConversationLoop {
     this.#maxDisplayRows = maxDisplayRows;
   }
 
-  async run() {
+  async run({ resumeSessionId = null } = {}) {
     this.#io.write("SQL Mentor AI — conversa de terminal B18");
     this.#io.write("Digite 'sair' a qualquer momento para encerrar.");
     let reason = "completed";
     try {
-      const learningGoal = await this.#io.readLine("Objetivo de aprendizagem> ");
-      if (learningGoal === null) return this.#finish("eof");
-      if (exitCommand(learningGoal)) return this.#finish("manual_exit");
-      let result = await this.#application.start({ learningGoal });
+      let result;
+      if (resumeSessionId !== null) {
+        result = await this.#application.resume(resumeSessionId);
+      } else {
+        const learningGoal = await this.#io.readLine("Objetivo de aprendizagem> ");
+        if (learningGoal === null) return await this.#finish("eof");
+        if (exitCommand(learningGoal)) return await this.#finish("manual_exit");
+        result = await this.#application.start({ learningGoal });
+      }
       this.#accept(result);
       if (eventError(result.events) || result.session.status === "error") {
-        return this.#finish("application_error");
+        return await this.#finish("application_error");
       }
 
       while (this.#lastSession?.status === "active") {
         const phase = this.#lastSession.phase;
         if (phase === "PROBE") {
           const answer = await this.#io.readLine("Sua resposta> ");
-          if (answer === null) return this.#finish(this.#io.interrupted ? "interrupt" : "eof");
-          if (exitCommand(answer)) return this.#finish("manual_exit");
+          if (answer === null) return await this.#finish(this.#io.interrupted ? "interrupt" : "eof");
+          if (exitCommand(answer)) return await this.#finish("manual_exit");
           if (answer.trim() === "") {
             this.#io.write("[ERRO] A resposta do diagnóstico não pode ficar vazia.");
             continue;
@@ -82,7 +87,7 @@ export class TerminalConversationLoop {
           result = await this.#application.submitProbeAnswer(answer);
           this.#accept(result);
           if (eventError(result.events) || result.session.status === "error") {
-            return this.#finish("application_error");
+            return await this.#finish("application_error");
           }
           continue;
         }
@@ -90,12 +95,12 @@ export class TerminalConversationLoop {
         if (phase === "PRACTICE" && this.#lastSession.current_exercise_id !== null
           && this.#presentedExerciseId === this.#lastSession.current_exercise_id) {
           const submission = await this.#readSql();
-          if (submission.reason !== null) return this.#finish(submission.reason);
+          if (submission.reason !== null) return await this.#finish(submission.reason);
           this.#presentedExerciseId = null;
           result = await this.#application.submitSql(submission.sql);
           this.#accept(result);
           if (eventError(result.events) || result.session.status === "error") {
-            return this.#finish("application_error");
+            return await this.#finish("application_error");
           }
           continue;
         }
@@ -105,7 +110,7 @@ export class TerminalConversationLoop {
           result = await this.#application.prepareLearningCycle();
           this.#accept(result);
           if (eventError(result.events) || result.session.status === "error") {
-            return this.#finish("application_error");
+            return await this.#finish("application_error");
           }
           continue;
         }
@@ -118,10 +123,10 @@ export class TerminalConversationLoop {
         reason = "application_error";
         break;
       }
-      return this.#finish(reason);
+      return await this.#finish(reason);
     } catch {
       this.#io.write("[ERRO] A sessão encontrou uma falha interna sanitizada.");
-      return this.#finish("application_error");
+      return await this.#finish("application_error");
     } finally {
       try {
         await this.#application.close?.();
@@ -164,6 +169,9 @@ export class TerminalConversationLoop {
     switch (event.type) {
       case "welcome":
         this.#io.write(`\n[TUTOR] ${data.message}`);
+        break;
+      case "session_resumed":
+        this.#io.write(`\n[SESSÃO RETOMADA] ${data.message}`);
         break;
       case "probe_question":
         this.#io.write(`\n[PROBE ${data.number}/${data.max_questions}] ${data.question}`);
@@ -217,8 +225,8 @@ export class TerminalConversationLoop {
     }
   }
 
-  #finish(reason) {
-    const ended = this.#application.endSession?.(reason);
+  async #finish(reason) {
+    const ended = await this.#application.endSession?.(reason);
     if (ended) this.#accept(ended);
     return Object.freeze({ reason, session: this.#lastSession });
   }

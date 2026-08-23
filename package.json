@@ -11,12 +11,13 @@
     "start": "node src/cli.js",
     "demo": "node src/cli.js --demo",
     "test": "node --test tests/unit/*.test.js",
-    "test:integration": "node --test tests/integration/*.test.js",
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
     "test:all": "npm test && npm run test:integration",
     "db:config": "docker compose config --quiet",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down --volumes && docker compose up -d --wait"
+    "db:reset": "docker compose down --volumes && docker compose up -d --wait",
+    "db:migrate": "node src/persistence/migrate-cli.js"
   },
   "dependencies": {
     "ajv": "^8.20.0",
