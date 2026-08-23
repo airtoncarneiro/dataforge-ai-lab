@@ -36,6 +36,66 @@ function withDuration(result, startedAt, clock) {
   };
 }
 
+function withExplainDuration(result, startedAt, clock) {
+  const elapsed = clock() - startedAt;
+  const durationMs = Number.isFinite(elapsed)
+    ? Math.max(0, Number(elapsed.toFixed(3)))
+    : 0;
+
+  return {
+    status: result.status,
+    analyze: false,
+    plan: result.status === "ok" ? result.plan : null,
+    planning_time_ms: result.status === "ok" ? result.planning_time_ms : null,
+    execution_time_ms: null,
+    duration_ms: durationMs,
+    error: result.error,
+  };
+}
+
+function finiteNumberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringOrNull(value) {
+  return typeof value === "string" ? value : null;
+}
+
+function normalizePlanNode(node) {
+  if (!node || typeof node !== "object" || Array.isArray(node)) {
+    throw new Error("Invalid PostgreSQL plan node");
+  }
+
+  return {
+    node_type: stringOrNull(node["Node Type"]),
+    relation_name: stringOrNull(node["Relation Name"]),
+    index_name: stringOrNull(node["Index Name"]),
+    startup_cost: finiteNumberOrNull(node["Startup Cost"]),
+    total_cost: finiteNumberOrNull(node["Total Cost"]),
+    plan_rows: finiteNumberOrNull(node["Plan Rows"]),
+    plan_width: finiteNumberOrNull(node["Plan Width"]),
+    subplan_name: stringOrNull(node["Subplan Name"]),
+    plans: Array.isArray(node.Plans) ? node.Plans.map(normalizePlanNode) : [],
+  };
+}
+
+function explainSuccessResult(result) {
+  const rawPayload = result.rows[0]?.["QUERY PLAN"];
+  const payload = typeof rawPayload === "string" ? JSON.parse(rawPayload) : rawPayload;
+  const document = Array.isArray(payload) ? payload[0] : payload;
+
+  if (!document || typeof document !== "object" || !document.Plan) {
+    throw new Error("Invalid PostgreSQL EXPLAIN payload");
+  }
+
+  return {
+    status: "ok",
+    plan: normalizePlanNode(document.Plan),
+    planning_time_ms: finiteNumberOrNull(document["Planning Time"]),
+    error: null,
+  };
+}
+
 function parsePositiveInteger(value, fallback, name, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   if (value === undefined || value === "") {
     return fallback;
@@ -119,12 +179,54 @@ export class SqlSandbox {
   }
 
   async execute(sql) {
+    return this.#runValidated(sql, {
+      buildQuery: (approvedSql) => (
+        `SELECT * FROM (${approvedSql}) AS sandbox_result LIMIT ${this.maxRows + 1}`
+      ),
+      mapSuccess: (result) => {
+        const truncated = result.rows.length > this.maxRows;
+        const rows = truncated ? result.rows.slice(0, this.maxRows) : result.rows;
+
+        return {
+          status: "ok",
+          columns: result.fields.map((field) => field.name),
+          rows,
+          row_count: rows.length,
+          truncated,
+          error: null,
+        };
+      },
+      formatResult: withDuration,
+    });
+  }
+
+  async explain(sql, { analyze = false } = {}) {
+    if (analyze !== false) {
+      const startedAt = this.clock();
+      return withExplainDuration(
+        errorResult(
+          ERROR_CATEGORIES.SECURITY,
+          "EXPLAIN ANALYZE não está habilitado no sandbox.",
+        ),
+        startedAt,
+        this.clock,
+      );
+    }
+
+    return this.#runValidated(sql, {
+      buildQuery: (approvedSql) => `EXPLAIN (FORMAT JSON, ANALYZE FALSE) ${approvedSql}`,
+      mapSuccess: explainSuccessResult,
+      formatResult: withExplainDuration,
+    });
+  }
+
+  async #runValidated(sql, { buildQuery, mapSuccess, formatResult }) {
     const startedAt = this.clock();
     let approved;
     try {
       approved = this.policy.validate(sql);
     } catch (error) {
-      return withDuration(mapError(error, this.timeoutMs), startedAt, this.clock);
+      return formatResult(mapError(error, this.timeoutMs), startedAt, this.clock);
     }
 
     let client;
@@ -146,19 +248,8 @@ export class SqlSandbox {
       await client.query(`SET LOCAL statement_timeout = ${this.timeoutMs}`);
       await client.query("SET LOCAL search_path = pg_catalog, education");
 
-      const limitedSql = `SELECT * FROM (${approved.sql}) AS sandbox_result LIMIT ${this.maxRows + 1}`;
-      const result = await client.query(limitedSql);
-      const truncated = result.rows.length > this.maxRows;
-      const rows = truncated ? result.rows.slice(0, this.maxRows) : result.rows;
-
-      output = {
-        status: "ok",
-        columns: result.fields.map((field) => field.name),
-        rows,
-        row_count: rows.length,
-        truncated,
-        error: null,
-      };
+      const result = await client.query(buildQuery(approved.sql));
+      output = mapSuccess(result);
     } catch (error) {
       output = mapError(error, this.timeoutMs);
     } finally {
@@ -174,7 +265,7 @@ export class SqlSandbox {
       client?.release(destroyClient);
     }
 
-    return withDuration(output, startedAt, this.clock);
+    return formatResult(output, startedAt, this.clock);
   }
 
   async close() {

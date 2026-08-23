@@ -1,4 +1,4 @@
-# SQL Sandbox — B04/B05
+# SQL Sandbox — B04/B05/B06
 
 O sandbox trata SQL do aluno como entrada hostil e permite somente consultas de leitura compatíveis com o dataset educacional.
 
@@ -34,4 +34,36 @@ Em falha, `error` contém somente `category`, `sqlstate` e mensagem sanitizada. 
 
 `duration_ms` mede, com relógio monotônico, a chamada completa do sandbox: política, aquisição/verificação da conexão, execução única da SQL e rollback. `row_count` representa a quantidade de linhas efetivamente devolvidas, não uma segunda contagem sobre o resultado completo.
 
-`EXPLAIN` pertence a B06 e permanece bloqueado.
+## Contrato de EXPLAIN
+
+`SqlSandbox.explain(sql)` recebe a SQL de leitura sem o prefixo `EXPLAIN`. A entrada passa pela mesma `SqlPolicy` usada por `execute()` e somente depois da aprovação o backend constrói `EXPLAIN (FORMAT JSON, ANALYZE FALSE)`.
+
+O retorno tem forma fixa em sucesso e erro:
+
+```json
+{
+  "status": "ok",
+  "analyze": false,
+  "plan": {
+    "node_type": "Index Scan",
+    "relation_name": "customers",
+    "index_name": "customers_pkey",
+    "startup_cost": 0.15,
+    "total_cost": 8.17,
+    "plan_rows": 1,
+    "plan_width": 36,
+    "subplan_name": null,
+    "plans": []
+  },
+  "planning_time_ms": 0.214,
+  "execution_time_ms": null,
+  "duration_ms": 2.315,
+  "error": null
+}
+```
+
+`plans` contém os filhos e subplans normalizados recursivamente. Campos opcionais do PostgreSQL são representados por `null`, sem alterar a forma do contrato. Em erro, `plan` e os tempos do PostgreSQL são `null`, e `error` usa as mesmas categorias e mensagens sanitizadas de Execution Evidence.
+
+A geração do plano mantém a role `mentor_sandbox`, a transação read-only, o `statement_timeout`, o `search_path`, o rollback e a higiene do pool. Apenas uma statement é enviada para gerar o plano; a SQL original não é executada separadamente.
+
+SQL iniciada por `EXPLAIN` continua proibida como entrada do aluno. `EXPLAIN ANALYZE` executaria a consulta e, por isso, é uma operação distinta: B06 não o habilita, `analyze: true` retorna `security_violation` sem abrir conexão, e `execution_time_ms` permanece `null`. A interpretação pedagógica do plano e qualquer uso de LLM permanecem fora deste componente.
