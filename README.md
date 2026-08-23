@@ -2,6 +2,65 @@
 
 Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL.
 
+## Estado atual
+
+A fundação `B01-B03` está implementada: aplicação mínima de terminal, PostgreSQL local reproduzível, dataset educacional e role de sandbox read-only isolada do estado da aplicação. O executor SQL, a integração com LLM e o fluxo pedagógico ainda não fazem parte desta entrega.
+
+## Execução local no macOS / VS Code
+
+Pré-requisitos:
+
+- Node.js 20 ou superior;
+- Docker Desktop ou Colima, com Docker Compose;
+- terminal integrado do VS Code aberto na raiz do repositório.
+
+Prepare as variáveis locais. O arquivo `.env` é ignorado pelo Git e não deve conter credenciais de produção:
+
+```bash
+cp .env.example .env
+```
+
+Troque as duas senhas de exemplo em `.env`. Depois valide e suba o PostgreSQL:
+
+```bash
+npm run db:config
+npm run db:up
+```
+
+Se usar Colima, inicie-o antes com `colima start`.
+
+Na primeira inicialização, os scripts em `docker/postgres/init/` criam automaticamente:
+
+- o schema `education` e seu dataset;
+- o schema privado `app_state`;
+- a role `mentor_sandbox`, com `SELECT` somente em `education`;
+- timeout padrão e transações read-only para a role de sandbox.
+
+Inicie o scaffold da aplicação de terminal:
+
+```bash
+npm start
+```
+
+Execute os testes:
+
+```bash
+npm test
+npm run test:integration
+```
+
+Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:up`. Para reaplicar os scripts de inicialização em um volume vazio, use conscientemente `npm run db:reset`; esse comando remove somente o volume local deste Compose.
+
+Ao terminar:
+
+```bash
+npm run db:down
+```
+
+## Dataset educacional
+
+O schema `education` contém `customers`, `orders`, `order_items`, `products`, `categories`, `employees` e `departments`. Os dados cobrem `NULL`, cliente sem pedido, produtos sem venda, cliente com múltiplos pedidos, datas variadas e relações com cardinalidades não triviais.
+
 ## Objetivo do MVP
 
 Validar se uma LLM consegue conduzir o aprendizado de SQL de forma adaptativa usando evidências objetivas produzidas por um PostgreSQL real.
