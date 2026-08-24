@@ -8,6 +8,7 @@ import { ExerciseService } from "../../src/exercise/index.js";
 import { SQL_KNOWLEDGE_GRAPH } from "../../src/knowledge-graph/index.js";
 import { LearnerModelService } from "../../src/learner-model/index.js";
 import { DemoLlmProvider, FakeLlmProvider, LlmAdapter } from "../../src/llm/index.js";
+import { InMemoryLogger } from "../../src/logging/index.js";
 import { TutorApplication, TutorPhaseService } from "../../src/orchestrator/index.js";
 import { IdempotencyConflictError, InMemorySessionStore } from "../../src/persistence/index.js";
 import { ProbeService } from "../../src/probe/index.js";
@@ -67,7 +68,7 @@ function correctValidation() {
   });
 }
 
-async function applicationHarness({ provider = new DemoLlmProvider(), sessionStore = null } = {}) {
+async function applicationHarness({ provider = new DemoLlmProvider(), sessionStore = null, logger } = {}) {
   const now = clock();
   const adapter = new LlmAdapter({
     provider,
@@ -75,6 +76,7 @@ async function applicationHarness({ provider = new DemoLlmProvider(), sessionSto
     timeoutMs: 100,
     maxRetries: 0,
     parameters: { temperature: 0 },
+    logger,
   });
   const policyBuilder = await createTutorPolicyContextBuilder();
   const graph = SQL_KNOWLEDGE_GRAPH;
@@ -146,6 +148,7 @@ async function applicationHarness({ provider = new DemoLlmProvider(), sessionSto
     maxProbeQuestions: 5,
     targetDifficulty: "medium",
     sessionStore,
+    logger,
   });
   return { app, calls, provider };
 }
@@ -268,6 +271,45 @@ test("B19 recupera sessão completa sem reaplicar Evaluation ou MasteryChange", 
     store.saveAttempt(before.id, conflictingAttempt),
     IdempotencyConflictError,
   );
+});
+
+test("B20 registra ciclo correlacionado sem SQL ou metadata trusted", async () => {
+  const logger = new InMemoryLogger();
+  const { app } = await applicationHarness({ logger });
+  await reachExercise(app);
+  await app.submitSql("SELECT customer_id, name FROM customers ORDER BY customer_id");
+  await app.endSession();
+
+  const names = logger.events.map((event) => event.event_name);
+  for (const name of [
+    "session.started", "probe.started", "probe.completed", "flow.transitioned",
+    "exercise.generated", "attempt.submitted", "sql.validated", "evaluation.completed",
+    "learner_state.updated", "adaptive_decision.made", "session.ended",
+  ]) assert.equal(names.includes(name), true, name);
+  const evaluated = logger.events.find((event) => event.event_name === "evaluation.completed");
+  assert.equal(typeof evaluated.correlation.session_id, "string");
+  assert.equal(typeof evaluated.correlation.attempt_id, "string");
+  assert.equal(typeof evaluated.correlation.evaluation_id, "string");
+  assert.equal(typeof evaluated.correlation.llm_request_id, "string");
+  assert.doesNotMatch(JSON.stringify(logger.events), /SELECT customer_id|reference_query|validation_metadata/iu);
+});
+
+test("B20 registra persistence/recovery e falha do logger não altera a sessão", async () => {
+  const store = new InMemorySessionStore();
+  const logger = new InMemoryLogger();
+  const first = await applicationHarness({ sessionStore: store, logger });
+  await first.app.start({ learningGoal: "Quero aprender SQL" });
+  const sessionId = first.app.session.id;
+  const recovered = await applicationHarness({ sessionStore: store, logger });
+  await recovered.app.resume(sessionId);
+  assert.equal(logger.events.some((event) => event.event_name === "persistence.saved"), true);
+  assert.equal(logger.events.some((event) => event.event_name === "session.recovered"), true);
+
+  const resilient = await applicationHarness({
+    logger: { log() { throw new Error("sink indisponível"); } },
+  });
+  const started = await resilient.app.start({ learningGoal: "Quero aprender SQL" });
+  assert.equal(started.session.status, "active");
 });
 
 test("coordenador não duplica cálculo de mastery nem importa acesso PostgreSQL direto", async () => {

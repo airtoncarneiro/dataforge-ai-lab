@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { createAttempt } from "../domain/index.js";
 import { toLearnerExercise } from "../exercise/index.js";
 import { classifyMastery } from "../learner-model/index.js";
+import { NullLogger, assertLogger, emitSafely, sqlFingerprint } from "../logging/index.js";
 import {
   TERMINAL_APPLICATION_POLICY_VERSION,
   TutorApplicationValidationError,
@@ -194,6 +195,7 @@ export class TutorApplication {
   #maxProbeQuestions;
   #targetDifficulty;
   #sessionStore;
+  #logger;
   #sessionPersisted = false;
   #closed = false;
   #session = null;
@@ -214,6 +216,7 @@ export class TutorApplication {
     maxProbeQuestions = 8,
     targetDifficulty = "medium",
     sessionStore = null,
+    logger = new NullLogger(),
   }) {
     const requirements = [
       [probeService, ["start", "submitAnswer"], "ProbeService B13"],
@@ -263,6 +266,7 @@ export class TutorApplication {
     this.#maxProbeQuestions = maxProbeQuestions;
     this.#targetDifficulty = targetDifficulty;
     this.#sessionStore = sessionStore === null ? null : assertStore(sessionStore);
+    this.#logger = assertLogger(logger);
   }
 
   get session() {
@@ -279,6 +283,7 @@ export class TutorApplication {
       await this.#sessionStore.loadSessionSnapshot(id),
     );
     this.#sessionPersisted = true;
+    this.#log("info", "session.recovered", { status: "ok" });
     return createApplicationResult(this.#session, [createApplicationEvent("session_resumed", {
       session_id: this.#session.id,
       phase: this.#session.flow_state.phase,
@@ -315,6 +320,7 @@ export class TutorApplication {
       learning_goal: goal,
       message: "Sessão iniciada. O diagnóstico PROBE vem antes do ensino.",
     })];
+    this.#log("info", "session.started", { status: "started" });
 
     let probe;
     try {
@@ -337,6 +343,7 @@ export class TutorApplication {
       return this.#applyProbeFailure(probe, events);
     }
     events.push(probeQuestionEvent(probe));
+    this.#log("info", "probe.started", { status: probe.status, data: { question_count: probe.question_count } });
     await this.#persist();
     return createApplicationResult(this.#session, events);
   }
@@ -364,6 +371,7 @@ export class TutorApplication {
     });
     if (probe.status === "error") return this.#applyProbeFailure(probe, []);
     if (probe.status === "active") {
+      this.#log("info", "probe.answer_processed", { status: "active", data: { question_count: probe.question_count } });
       await this.#persist();
       return createApplicationResult(this.#session, [probeQuestionEvent(probe)]);
     }
@@ -382,6 +390,7 @@ export class TutorApplication {
       updated_at: probe.updated_at,
     });
     await this.#persist();
+    this.#log("info", "probe.completed", { status: probe.status, data: { completion_reason: probe.result.completion_reason } });
     return createApplicationResult(this.#session, [
       probeCompletedEvent(probe),
       progressEvent(probe.learner_state, flowState.current_concept),
@@ -509,6 +518,10 @@ export class TutorApplication {
           updated_at: at,
         });
         await this.#persist();
+        this.#log("info", "exercise.generated", {
+          status: "ok",
+          data: { difficulty: trusted.exercise.difficulty, concepts: trusted.exercise.concepts },
+        });
         events.push(publicExerciseEvent(trusted));
         return createApplicationResult(this.#session, events);
       }
@@ -558,6 +571,10 @@ export class TutorApplication {
       attempts: [...this.#session.attempts, attempt],
       updated_at: at,
     });
+    this.#log("info", "attempt.submitted", {
+      status: "received",
+      data: { sql_fingerprint: sqlFingerprint(studentSql) },
+    });
 
     try {
       const validation = await this.#resultValidator.validate({
@@ -573,6 +590,18 @@ export class TutorApplication {
         evaluatedConcepts: trusted.validation_metadata.concepts_evaluated,
         recentMessages: [],
       });
+      this.#log("info", "sql.validated", {
+        status: validation.status,
+        operation: { duration_ms: validation.execution?.duration_ms },
+        data: { row_count: validation.execution?.row_count ?? null, truncated: validation.execution?.truncated ?? false },
+      });
+      this.#log("info", "evaluation.completed", {
+        status: evaluatorResult.objective_assessment.status,
+        correlation: {
+          evaluation_id: evaluatorResult.evaluation.id,
+          llm_request_id: evaluatorResult.provenance.llm_request_id,
+        },
+      });
       const evaluatedAt = evaluatorResult.evaluation.evaluated_at;
       flowState = this.#stateMachine.transition(flowState, "evaluation_completed", {
         reason: "Evaluator B17 produziu Evaluation estruturada.",
@@ -583,12 +612,22 @@ export class TutorApplication {
         this.#session.learner_state,
         evaluatorResult.evaluation,
       );
+      this.#log("info", "learner_state.updated", {
+        status: "ok",
+        correlation: { evaluation_id: evaluatorResult.evaluation.id },
+        data: { mastery_change_count: update.mastery_changes.length },
+      });
       const decision = this.#decisionService.decide({
         learner_state: update.learner_state,
         evaluation: evaluatorResult.evaluation,
         knowledge_graph: this.#knowledgeGraph,
         current_concept: flowState.current_concept,
         retry_count: this.#session.retry_count,
+      });
+      this.#log("info", "adaptive_decision.made", {
+        status: "ok",
+        correlation: { evaluation_id: evaluatorResult.evaluation.id },
+        data: { action: decision.action, reason_codes: decision.reason_codes },
       });
       flowState = this.#stateMachine.applyAdaptiveDecision(
         flowState,
@@ -632,6 +671,7 @@ export class TutorApplication {
       updated_at: at,
     });
     await this.#persist();
+    this.#log("info", "session.ended", { status: reason });
     return createApplicationResult(this.#session, [
       createApplicationEvent("session_ended", {
         reason,
@@ -661,6 +701,10 @@ export class TutorApplication {
       updated_at: at,
     });
     await this.#persist();
+    this.#log("info", "flow.transitioned", {
+      status: "ok",
+      data: { event, from: this.#session.flow_state.transition_history.at(-1)?.from, to: this.#session.flow_state.phase },
+    });
   }
 
   #requireActiveSession() {
@@ -694,6 +738,11 @@ export class TutorApplication {
       retryable: flowState.error.retryable,
     }));
     await this.#persist();
+    this.#log("error", "session.failed", {
+      status: "error",
+      error: safe,
+      data: { failed_event: failedEvent },
+    });
     return createApplicationResult(this.#session, events);
   }
 
@@ -728,11 +777,40 @@ export class TutorApplication {
 
   async #persist() {
     if (this.#sessionStore === null) return;
-    if (!this.#sessionPersisted) {
-      await this.#sessionStore.createSession(this.#session);
-      this.#sessionPersisted = true;
-      return;
+    try {
+      if (!this.#sessionPersisted) {
+        await this.#sessionStore.createSession(this.#session);
+        this.#sessionPersisted = true;
+      } else {
+        await this.#sessionStore.saveSessionSnapshot(this.#session);
+      }
+      this.#log("debug", "persistence.saved", { status: "ok" });
+    } catch (error) {
+      this.#log("error", "persistence.failed", { status: "error", error });
+      throw error;
     }
-    await this.#sessionStore.saveSessionSnapshot(this.#session);
+  }
+
+  #log(level, eventName, { status = "ok", operation = {}, correlation = {}, error = null, data = {} } = {}) {
+    const session = this.#session;
+    const attempt = session?.attempts.at(-1) ?? null;
+    const evaluation = session?.evaluations.at(-1)?.evaluation ?? null;
+    emitSafely(this.#logger, {
+      timestamp: new Date().toISOString(),
+      level,
+      event_name: eventName,
+      policy_version: session?.policy_version ?? TERMINAL_APPLICATION_POLICY_VERSION,
+      correlation: {
+        session_id: session?.id ?? null,
+        exercise_id: session?.current_exercise?.exercise.id ?? attempt?.exercise_id ?? null,
+        attempt_id: attempt?.id ?? null,
+        evaluation_id: evaluation?.id ?? null,
+        llm_request_id: session?.evaluations.at(-1)?.provenance.llm_request_id ?? null,
+        ...correlation,
+      },
+      operation: { status, ...operation },
+      error,
+      data,
+    });
   }
 }

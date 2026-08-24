@@ -3,6 +3,7 @@ import {
   LlmProviderError,
   publicError,
 } from "./errors.js";
+import { NullLogger, assertLogger, emitSafely } from "../logging/index.js";
 import { compileOutputSchema } from "./schema-validator.js";
 
 const MESSAGE_ROLES = Object.freeze(["user", "assistant"]);
@@ -183,6 +184,7 @@ export class LlmAdapter {
   #timeoutMs;
   #maxRetries;
   #parameters;
+  #logger;
 
   constructor({
     provider,
@@ -190,6 +192,7 @@ export class LlmAdapter {
     timeoutMs = 30_000,
     maxRetries = 1,
     parameters = {},
+    logger = new NullLogger(),
   }) {
     if (!provider || typeof provider.generate !== "function") {
       throw new LlmConfigurationError(
@@ -211,6 +214,7 @@ export class LlmAdapter {
     this.#timeoutMs = timeoutMs;
     this.#maxRetries = maxRetries;
     this.#parameters = deepFreeze(cloneJson(parameters, "parameters"));
+    this.#logger = assertLogger(logger);
   }
 
   get configuration() {
@@ -225,6 +229,7 @@ export class LlmAdapter {
 
   async generate({ instructions, messages, outputSchema, tools = [] }) {
     const identity = providerIdentity(this.#provider);
+    const startedAt = Date.now();
     let attempts = 0;
     try {
       const schema = cloneJson(outputSchema, "outputSchema");
@@ -272,7 +277,7 @@ export class LlmAdapter {
                 message: "The LLM response did not contain structured output.",
               });
             }
-            return deepFreeze({
+            const result = deepFreeze({
               status: "tool_request",
               ...identity,
               policy_version: this.#policyVersion,
@@ -283,6 +288,8 @@ export class LlmAdapter {
               attempts,
               error: null,
             });
+            this.#log(result, startedAt);
+            return result;
           }
 
           const output = parseStructuredOutput(response.output);
@@ -297,7 +304,7 @@ export class LlmAdapter {
             throw mismatch;
           }
 
-          return deepFreeze({
+          const result = deepFreeze({
             status: "ok",
             ...identity,
             policy_version: this.#policyVersion,
@@ -308,6 +315,8 @@ export class LlmAdapter {
             attempts,
             error: null,
           });
+          this.#log(result, startedAt);
+          return result;
         } catch (error) {
           const normalized = this.#normalizeInvocationError(error);
           if (normalized.retryable && attempts <= this.#maxRetries) {
@@ -335,7 +344,9 @@ export class LlmAdapter {
           details: normalized.validationErrors,
         });
       }
-      return deepFreeze(result);
+      const frozen = deepFreeze(result);
+      this.#log(frozen, startedAt);
+      return frozen;
     }
   }
 
@@ -379,6 +390,23 @@ export class LlmAdapter {
       category: "provider_error",
       code: "provider_failure",
       message: "The LLM provider could not complete the request.",
+    });
+  }
+
+  #log(result, startedAt) {
+    emitSafely(this.#logger, {
+      timestamp: new Date().toISOString(),
+      level: result.status === "error" ? "warn" : "info",
+      event_name: result.status === "error" ? "llm.request.failed" : "llm.request.completed",
+      policy_version: this.#policyVersion,
+      correlation: { llm_request_id: result.request_id },
+      operation: {
+        status: result.status,
+        duration_ms: Math.max(0, Date.now() - startedAt),
+        attempts: result.attempts,
+      },
+      error: result.error,
+      data: { provider: result.provider, model: result.model },
     });
   }
 }

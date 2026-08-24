@@ -3,6 +3,7 @@ import { EvaluatorService } from "../evaluator/index.js";
 import { ExerciseService } from "../exercise/index.js";
 import { SQL_KNOWLEDGE_GRAPH } from "../knowledge-graph/index.js";
 import { LearnerModelService } from "../learner-model/index.js";
+import { ConsoleJsonLogger } from "../logging/index.js";
 import {
   DemoLlmProvider,
   LlmAdapter,
@@ -37,13 +38,14 @@ function difficulty(value) {
   return normalized;
 }
 
-function createDemoAdapter() {
+function createDemoAdapter(logger) {
   return new LlmAdapter({
     provider: new DemoLlmProvider(),
     policyVersion: TUTOR_POLICY_VERSION,
     timeoutMs: 1_000,
     maxRetries: 0,
     parameters: { temperature: 0 },
+    logger,
   });
 }
 
@@ -51,10 +53,11 @@ export async function createTutorApplicationFromEnv({
   env = process.env,
   demo = false,
   clock = () => new Date().toISOString(),
+  logger = new ConsoleJsonLogger(),
 } = {}) {
   const knowledgeGraph = SQL_KNOWLEDGE_GRAPH;
   const learnerModel = new LearnerModelService();
-  const adapter = demo ? createDemoAdapter() : createLlmAdapterFromEnv(env);
+  const adapter = demo ? createDemoAdapter(logger) : createLlmAdapterFromEnv(env, { logger });
   const policyBuilder = await createTutorPolicyContextBuilder();
   const sandbox = createSqlSandboxFromEnv(env);
   const sessionStore = createPostgresSessionStoreFromEnv(env);
@@ -91,6 +94,7 @@ export async function createTutorApplicationFromEnv({
       await Promise.all([sandbox.close(), sessionStore.close()]);
     },
     sessionStore,
+    logger,
     probeTargetConcepts: demo ? ["select"] : undefined,
     maxProbeQuestions: integer(
       env.SQL_MENTOR_PROBE_MAX_QUESTIONS,

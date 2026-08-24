@@ -79,7 +79,7 @@ function loadLlmConfig(env = process.env) {
 
 export function createLlmAdapterFromEnv(
   env = process.env,
-  { fetchImpl = globalThis.fetch } = {},
+  { fetchImpl = globalThis.fetch, logger } = {},
 ) {
   const config = loadLlmConfig(env);
   const provider = new OpenAIResponsesProvider({
@@ -93,5 +93,6 @@ export function createLlmAdapterFromEnv(
     timeoutMs: config.timeoutMs,
     maxRetries: config.maxRetries,
     parameters: config.parameters,
+    logger,
   });
 }
