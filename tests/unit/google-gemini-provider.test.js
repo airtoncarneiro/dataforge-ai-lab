@@ -50,7 +50,11 @@ test("Google Gemini traduz contrato neutro para generateContent estruturado", as
   assert.equal(observed.init.headers["x-goog-api-key"], "google-test-only");
   assert.deepEqual(body.generationConfig, {
     responseMimeType: "application/json",
-    responseJsonSchema: REQUEST.outputSchema,
+    responseSchema: {
+      type: "object",
+      required: ["answer"],
+      properties: { answer: { type: "string", description: "Short answer" } },
+    },
     maxOutputTokens: 321,
     temperature: 0.2,
     topP: 0.9,
@@ -81,14 +85,28 @@ test("Google Gemini remove keywords fora do subconjunto de JSON Schema sem alter
     additionalProperties: false,
   };
   await provider.generate({ ...REQUEST, outputSchema: schema });
-  assert.deepEqual(observed.generationConfig.responseJsonSchema, {
+  assert.deepEqual(observed.generationConfig.responseSchema, {
     type: "object",
     properties: { answer: { type: "string", description: "answer" } },
     required: ["answer"],
-    additionalProperties: false,
   });
   assert.equal(schema.properties.answer.minLength, 1);
   assert.equal(schema.properties.answer.pattern, "^[A-Z]+$");
+});
+
+test("modelos Gemini mantêm responseJsonSchema quando não exigem o formato Gemma", async () => {
+  let observed;
+  const provider = new GoogleGeminiProvider({
+    apiKey: "google-test-only",
+    model: "gemini-2.5-flash",
+    fetchImpl: async (_url, init) => {
+      observed = JSON.parse(init.body);
+      return { ok: true, status: 200, async json() { return { candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }] }; } };
+    },
+  });
+  await provider.generate(REQUEST);
+  assert.deepEqual(observed.generationConfig.responseJsonSchema, REQUEST.outputSchema);
+  assert.equal("responseSchema" in observed.generationConfig, false);
 });
 
 test("Google Gemini classifica erros HTTP sem expor o body do provider", async () => {

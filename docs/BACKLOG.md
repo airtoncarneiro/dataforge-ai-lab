@@ -364,6 +364,7 @@ com PostgreSQL real permanece em `tests/integration/sql-sandbox.test.js`.
 Implementado:
 
 - métricas agregadas para a avaliação ao vivo dos fixtures B25;
+- contrato compacto do gate B25 (320 tokens por padrão) e `responseSchema` para Gemma;
 - carregamento opcional do `.env`, seleção de fixture e tolerância a falhas por chamada;
 - rejeição de vazamento de solução com uma única regeneração sem reenviar o texto vazado;
 - intervalo configurável por `LLM_EVAL_DELAY_MS` para reduzir pressão sobre quota/rate limit;

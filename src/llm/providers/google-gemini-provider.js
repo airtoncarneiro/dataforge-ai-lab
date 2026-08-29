@@ -6,15 +6,21 @@ const GEMINI_SCHEMA_KEYS = new Set([
   "enum", "items", "prefixItems", "minItems", "maxItems", "minimum", "maximum",
   "anyOf", "oneOf", "properties", "additionalProperties", "required", "propertyOrdering",
 ]);
+const GEMINI_RESPONSE_SCHEMA_KEYS = new Set([
+  "type", "format", "title", "description", "enum", "items", "prefixItems",
+  "minItems", "maxItems", "minimum", "maximum", "anyOf", "oneOf", "properties",
+  "required", "propertyOrdering",
+]);
 
-function normalizeGeminiSchema(schema) {
-  if (Array.isArray(schema)) return schema.map(normalizeGeminiSchema);
+function normalizeGeminiSchema(schema, { responseSchema = false } = {}) {
+  if (Array.isArray(schema)) return schema.map((item) => normalizeGeminiSchema(item, { responseSchema }));
   if (schema === null || typeof schema !== "object") return schema;
+  const allowedKeys = responseSchema ? GEMINI_RESPONSE_SCHEMA_KEYS : GEMINI_SCHEMA_KEYS;
   return Object.fromEntries(Object.entries(schema)
-    .filter(([key]) => GEMINI_SCHEMA_KEYS.has(key))
+    .filter(([key]) => allowedKeys.has(key))
     .map(([key, value]) => [key, key === "properties" || key === "$defs"
-      ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, normalizeGeminiSchema(child)]))
-      : normalizeGeminiSchema(value)]));
+      ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, normalizeGeminiSchema(child, { responseSchema })]))
+      : normalizeGeminiSchema(value, { responseSchema })]));
 }
 
 function required(value, code, message) {
@@ -33,7 +39,8 @@ function normalizeUsage(value) {
   };
 }
 
-function buildRequest(request) {
+function buildRequest(request, { useResponseSchema = false } = {}) {
+  const schemaField = useResponseSchema ? "responseSchema" : "responseJsonSchema";
   const body = {
     systemInstruction: { parts: [{ text: request.instructions }] },
     contents: request.messages.map((message) => ({
@@ -42,7 +49,7 @@ function buildRequest(request) {
     })),
     generationConfig: {
       responseMimeType: "application/json",
-      responseJsonSchema: normalizeGeminiSchema(request.outputSchema),
+      [schemaField]: normalizeGeminiSchema(request.outputSchema, { responseSchema: useResponseSchema }),
     },
   };
   const { maxOutputTokens, temperature, topP } = request.parameters;
@@ -104,7 +111,7 @@ export class GoogleGeminiProvider {
       response = await this.#fetch(`${this.#baseUrl}/models/${encodeURIComponent(this.#model)}:generateContent`, {
         method: "POST",
         headers: { "x-goog-api-key": this.#apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify(buildRequest(request)),
+        body: JSON.stringify(buildRequest(request, { useResponseSchema: this.#model.startsWith("gemma-") })),
         signal: request.signal,
       });
     } catch (error) {

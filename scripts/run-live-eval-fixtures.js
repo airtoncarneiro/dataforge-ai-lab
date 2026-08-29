@@ -1,7 +1,16 @@
 import { readFile } from "node:fs/promises";
 
 import { createLlmAdapterFromEnv } from "../src/llm/index.js";
-import { evaluateFixture, summarizeB27 } from "../src/evaluation-fixtures/index.js";
+import {
+  evaluateFixture,
+  LIVE_EVALUATION_INSTRUCTIONS,
+  LIVE_EVALUATION_OUTPUT_SCHEMA,
+  liveEvaluationAdapterEnv,
+  outputFormatCorrectionMessage,
+  shouldRetryLiveFormatError,
+  solutionLeakCorrectionMessage,
+  summarizeB27,
+} from "../src/evaluation-fixtures/index.js";
 
 async function loadDotEnv() {
   try {
@@ -27,51 +36,34 @@ const started = Date.now();
 await loadDotEnv();
 
 const fixtureUrl = new URL("../tests/fixtures/llm-evaluation/b25-evaluation-fixtures.json", import.meta.url);
-const schema = {
-  type: "object", additionalProperties: false,
-  required: ["next_action", "message_to_learner", "hints", "misconceptions"],
-  properties: {
-    next_action: {
-      type: "string",
-      enum: ["retry", "reteach", "practice", "advance", "review"],
-      description: "A única ação pedagógica recomendada com base nas evidências da tentativa.",
-    },
-    message_to_learner: {
-      type: "string",
-      minLength: 1,
-      description: "Feedback curto para o aluno, sem SQL, sem solução e sem bloco de código.",
-    },
-    hints: {
-      type: "array",
-      description: "Dicas graduais que orientam sem revelar a consulta SQL correta.",
-      items: { type: "string" },
-    },
-    misconceptions: {
-      type: "array",
-      description: "Conceitos ou raciocínios incorretos observados na tentativa; vazio quando não houver evidência.",
-      items: { type: "string" },
-    },
-  },
-};
-
 const fixtures = selectedFixtures(JSON.parse(await readFile(fixtureUrl, "utf8")));
-const adapter = createLlmAdapterFromEnv(process.env);
+const adapter = createLlmAdapterFromEnv(liveEvaluationAdapterEnv(process.env));
 const delayMs = Math.max(0, Number(process.env.LLM_EVAL_DELAY_MS ?? 0) || 0);
 const records = [];
 for (const fixture of fixtures) {
   const requestStarted = Date.now();
-  const instructions = "Você é avaliador pedagógico de SQL. Não escreva SQL, não revele solução, não inclua fragmentos SELECT/FROM e responda somente o schema solicitado.";
+  const instructions = LIVE_EVALUATION_INSTRUCTIONS;
   const messages = [{ role: "user", content: JSON.stringify({ kind: "evaluation_fixture", fixture }) }];
   let response;
   try {
     response = await adapter.generate({
       instructions,
       messages,
-      outputSchema: schema,
+      outputSchema: LIVE_EVALUATION_OUTPUT_SCHEMA,
       tools: [],
     });
   } catch (error) {
     response = { status: "error", error: { code: error?.code ?? "provider_error" } };
+  }
+  let formatAttempts = 1;
+  if (response.status === "error" && shouldRetryLiveFormatError(response.error?.code)) {
+    formatAttempts += 1;
+    response = await adapter.generate({
+      instructions,
+      messages: [...messages, { role: "user", content: outputFormatCorrectionMessage() }],
+      outputSchema: LIVE_EVALUATION_OUTPUT_SCHEMA,
+      tools: [],
+    });
   }
   let semanticAttempts = 1;
   let evaluation = response.status === "ok"
@@ -83,13 +75,9 @@ for (const fixture of fixtures) {
       instructions,
       messages: [...messages, {
         role: "user",
-        content: JSON.stringify({
-          kind: "pedagogical_output_correction",
-          rejection_code: "solution_leak",
-          instruction: "Gere nova resposta sem SQL, fragmentos de consulta, SELECT/FROM ou solução completa; use apenas orientação conceitual e socrática.",
-        }),
+        content: solutionLeakCorrectionMessage(),
       }],
-      outputSchema: schema,
+      outputSchema: LIVE_EVALUATION_OUTPUT_SCHEMA,
       tools: [],
     });
     evaluation = response.status === "ok"
@@ -102,6 +90,7 @@ for (const fixture of fixtures) {
     duration_ms: Date.now() - requestStarted,
     error_code: response.error?.code ?? null,
     http_status: response.error?.http_status ?? null,
+    format_attempts: formatAttempts,
     semantic_attempts: semanticAttempts,
     evaluation,
   };

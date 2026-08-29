@@ -64,7 +64,7 @@ Categorias publicas: `configuration_error`, `authentication_error`, `timeout`, `
 
 ## Provider
 
-- `GoogleGeminiProvider`: implementa a Gemini API `generateContent` com `responseMimeType=application/json` e `responseJsonSchema`. Usa `fetch` injetavel e nao e importado pelo dominio.
+- `GoogleGeminiProvider`: implementa a Gemini API `generateContent` com `responseMimeType=application/json`. Para Gemma usa `responseSchema` (subconjunto OpenAPI); para Gemini usa `responseJsonSchema`. A validação AJV local continua estrita em ambos os casos.
 - `FakeLlmProvider`: executa roteiros deterministas `valid`, `invalid`, `timeout`, `provider_error`, `authentication_error` e `refusal`, sem rede.
 
 Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha tecnica marcada como transitoria. Autenticacao, recusa, configuracao e formato invalido nao sao repetidos.

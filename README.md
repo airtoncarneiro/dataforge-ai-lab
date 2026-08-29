@@ -85,7 +85,8 @@ npm run test:eval-fixtures
 ```
 
 Uma avaliação ao vivo opcional usa as variáveis do `.env` e pode consumir quota
-do provider. Configure `LLM_EVAL_DELAY_MS` para espaçar as chamadas:
+do provider. Configure `LLM_EVAL_DELAY_MS` para espaçar as chamadas; o gate usa
+`LLM_EVAL_MAX_OUTPUT_TOKENS=320` por padrão para manter respostas compactas:
 
 ```bash
 set -a; source .env; set +a; npm run eval:live
