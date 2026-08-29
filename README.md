@@ -85,19 +85,22 @@ npm run test:eval-fixtures
 ```
 
 Uma avaliação ao vivo opcional usa as variáveis do `.env` e pode consumir quota
-do provider:
+do provider. Configure `LLM_EVAL_DELAY_MS` para espaçar as chamadas:
 
 ```bash
 set -a; source .env; set +a; npm run eval:live
 ```
 
+O shell web local pode ser iniciado com `npm run web` e fica disponível em
+`http://127.0.0.1:3000`.
+
 Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:up`. Para reaplicar os scripts de inicialização em um volume vazio, use conscientemente `npm run db:reset`; esse comando remove somente o volume local deste Compose.
 
 O sandbox usa `SQL_MENTOR_SANDBOX_TIMEOUT_MS` e `SQL_MENTOR_SANDBOX_MAX_ROWS` para limitar cada consulta. A role da aplicação é fixa como `mentor_sandbox`; não configure o executor com a credencial administrativa.
 
-O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase. O Exercise Service B15 usa B11/B12 para geração estruturada, mas aplica localmente difficulty, pré-requisitos e validação de metadata. O Result Validator B16 executa aluno e referência exclusivamente pelo Sandbox, compara resultados sem equivalência textual e verifica constraints pela AST/plano; a `reference_query` trusted nunca entra no contrato público. O Evaluator B17 preserva esses fatos como authoritative, usa B11/B12 somente para interpretação pedagógica e produz `Evaluation` B07 com fallback determinístico. A coordenação B18 encadeia esses componentes, enquanto B08 continua aplicando evidências e B10 continua decidindo a ação final. B19 persiste snapshots e registros normalizados com transação e chaves idempotentes para que uma `Evaluation` e seus `MasteryChange` não sejam reaplicados. B20 emite JSON estruturado para stdout, com IDs correlacionados e redaction central de segredos, SQL e conteúdo trusted. A aplicação usa exclusivamente a Gemini API com `OPENAI_API_KEY` (mantida por compatibilidade local), `OPENAI_MODEL=gemma-4-26b-a4b-it`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes não fazem chamadas reais ao provider.
+O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase. O Exercise Service B15 usa B11/B12 para geração estruturada, mas aplica localmente difficulty, pré-requisitos e validação de metadata. O Result Validator B16 executa aluno e referência exclusivamente pelo Sandbox, compara resultados sem equivalência textual e verifica constraints pela AST/plano; a `reference_query` trusted nunca entra no contrato público. O Evaluator B17 preserva esses fatos como authoritative, usa B11/B12 somente para interpretação pedagógica e produz `Evaluation` B07 com fallback determinístico. A coordenação B18 encadeia esses componentes, enquanto B08 continua aplicando evidências e B10 continua decidindo a ação final. B19 persiste snapshots e registros normalizados com transação e chaves idempotentes para que uma `Evaluation` e seus `MasteryChange` não sejam reaplicados. B20 emite JSON estruturado para stdout, com IDs correlacionados e redaction central de segredos, SQL e conteúdo trusted. A aplicação usa exclusivamente a Gemini API com `GOOGLE_API_KEY`, `OPENAI_MODEL=gemma-4-26b-a4b-it`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes não fazem chamadas reais ao provider.
 
-O fluxo não depende de OpenRouter, OmniRouter ou de um preset de roteamento.
+O fluxo não depende de preset de roteamento; a aplicação usa diretamente a Gemini API.
 
 Ao terminar:
 
@@ -139,7 +142,7 @@ retry / reteach / practice / advance / review
 
 ## Escopo inicial
 
-- Interface de terminal; frontend fica fora do MVP inicial.
+- Interface de terminal e um shell web local para experimentar o mesmo fluxo.
 - Um único aluno/sessão por execução é suficiente inicialmente.
 - PostgreSQL como mecanismo real de execução dos exercícios.
 - Tutor adaptativo orientado por Knowledge Dependency Graph.
@@ -151,7 +154,7 @@ retry / reteach / practice / advance / review
 
 ## Fora do escopo inicial
 
-- Frontend web.
+- Frontend web de produção.
 - Autenticação e autorização multiusuário.
 - Gamificação.
 - Billing.

@@ -60,7 +60,7 @@ function loadLlmConfig(env = process.env) {
 
   return Object.freeze({
     provider: "google",
-    apiKey: required(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
+    apiKey: required(env.GOOGLE_API_KEY ?? env.OPENAI_API_KEY, "GOOGLE_API_KEY"),
     model: required(env.OPENAI_MODEL, "OPENAI_MODEL"),
     policyVersion: required(env.LLM_POLICY_VERSION, "LLM_POLICY_VERSION"),
     timeoutMs: integer(env.LLM_TIMEOUT_MS, "LLM_TIMEOUT_MS", 30_000, { min: 1 }),

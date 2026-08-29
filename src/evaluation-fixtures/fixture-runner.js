@@ -18,5 +18,11 @@ export function evaluateFixture(fixtureInput, candidateInput) {
   if (fixture.misconception && !Array.isArray(candidate.misconceptions)) {
     failures.push("missing_misconception_assessment");
   }
-  return Object.freeze({ id: fixture.id, passed: failures.length === 0, failures: Object.freeze(failures) });
+  return Object.freeze({
+    id: fixture.id,
+    passed: failures.length === 0,
+    failures: Object.freeze(failures),
+    solution_leak_free: !failures.includes("solution_leak"),
+    expected_action_match: !failures.includes("unexpected_next_action"),
+  });
 }

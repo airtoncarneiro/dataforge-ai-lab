@@ -227,7 +227,7 @@ test("configuracao ausente falha antes de qualquer chamada externa", () => {
       OPENAI_MODEL: "configured-model",
       LLM_POLICY_VERSION: "policy-v1",
     }),
-    (error) => error instanceof LlmConfigurationError && error.code === "missing_openai_api_key",
+    (error) => error instanceof LlmConfigurationError && error.code === "missing_google_api_key",
   );
 });
 

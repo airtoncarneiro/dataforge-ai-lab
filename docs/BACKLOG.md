@@ -359,6 +359,19 @@ Cobrir tentativas de bypass, múltiplos statements, comentários, comandos proib
 Cobertura adicional registrada em `tests/unit/sql-policy.test.js`; a validação
 com PostgreSQL real permanece em `tests/integration/sql-sandbox.test.js`.
 
+### B27 — Qualification gate e shell web local
+
+Implementado:
+
+- métricas agregadas para a avaliação ao vivo dos fixtures B25;
+- carregamento opcional do `.env`, seleção de fixture e tolerância a falhas por chamada;
+- intervalo configurável por `LLM_EVAL_DELAY_MS` para reduzir pressão sobre quota/rate limit;
+- servidor web local em `npm run web`, reutilizando a aplicação de terminal;
+- endpoint de saúde e API de sessão para diagnóstico, preparação do ciclo e submissão de SQL.
+
+O gate não substitui a validação determinística: chamadas reais continuam opcionais,
+consomem quota e devem ser interpretadas junto com os testes locais e de integração.
+
 ## Gate do MVP
 
 O intervalo P0 é B01–B20. B20 — Logs estruturados é o último requisito P0 necessário ao MVP.

@@ -72,13 +72,14 @@ Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha te
 ## Configuracao
 
 ```text
-# A chave usa este nome por compatibilidade; deve ser criada no Google AI Studio.
-OPENAI_API_KEY=...
+# Chave criada no Google AI Studio.
+GOOGLE_API_KEY=...
 OPENAI_MODEL=gemma-4-26b-a4b-it
 LLM_POLICY_VERSION=...
 LLM_TIMEOUT_MS=30000
 LLM_MAX_RETRIES=1
 LLM_MAX_OUTPUT_TOKENS=1200
+LLM_EVAL_DELAY_MS=1000
 LLM_TEMPERATURE=0
 LLM_TOP_P=           # opcional
 ```

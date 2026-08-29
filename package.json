@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node src/cli.js",
+    "web": "node src/web/server.js",
     "demo": "node src/cli.js --demo",
     "test": "node --test tests/unit/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
