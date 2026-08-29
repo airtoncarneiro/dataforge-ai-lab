@@ -13,6 +13,8 @@
     "test": "node --test tests/unit/*.test.js",
     "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.js",
     "test:all": "npm test && npm run test:integration",
+    "test:eval-fixtures": "node --test tests/unit/evaluation-fixture-runner.test.js tests/unit/b25-evaluation-fixtures.test.js",
+    "eval:live": "node scripts/run-live-eval-fixtures.js",
     "db:config": "docker compose config --quiet",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",

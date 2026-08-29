@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LlmProviderError, OpenRouterProvider } from "../../src/llm/index.js";
+import { LlmProviderError, OpenAICompatibleProvider, OpenRouterProvider } from "../../src/llm/index.js";
 
 const REQUEST = Object.freeze({
   instructions: "System instructions",
@@ -53,6 +53,7 @@ test("provider OpenRouter usa Chat Completions compatível com Structured Output
     type: "json_schema",
     json_schema: { name: "sql_mentor_response", strict: true, schema: REQUEST.outputSchema },
   });
+  assert.deepEqual(body.provider, { require_parameters: true });
   assert.deepEqual(body.tools[0], {
     type: "function",
     function: {
@@ -72,6 +73,58 @@ test("provider OpenRouter usa Chat Completions compatível com Structured Output
     requestId: "or-1",
     usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 },
   });
+});
+
+test("provider OpenAI-compatible expõe nome configurável sem duplicar adaptador", () => {
+  const provider = new OpenAICompatibleProvider({
+    apiKey: "sk-or-test-only",
+    model: "provider/model",
+    providerName: "omnirouter",
+    fetchImpl: async () => response({ id: "unused", choices: [{ message: { content: '{"answer":"ok"}' } }] }),
+  });
+  assert.equal(provider.name, "omnirouter");
+});
+
+test("provider OpenRouter fixa rota e habilita Response Healing para saída estruturada", async () => {
+  let observed;
+  const provider = new OpenRouterProvider({
+    apiKey: "sk-or-test-only",
+    model: "google/gemini-2.5-flash",
+    providerPreferences: { order: ["google-ai-studio"], allow_fallbacks: false },
+    responseHealing: true,
+    fetchImpl: async (_url, init) => {
+      observed = JSON.parse(init.body);
+      return response({ id: "or-routed", choices: [{ message: { content: '{"answer":"ok"}' } }] });
+    },
+  });
+
+  await provider.generate(REQUEST);
+
+  assert.deepEqual(observed.provider, {
+    require_parameters: true,
+    order: ["google-ai-studio"],
+    allow_fallbacks: false,
+  });
+  assert.deepEqual(observed.plugins, [{ id: "response-healing" }]);
+});
+
+test("provider OpenRouter preserva o roteamento de presets", async () => {
+  let observed;
+  const provider = new OpenRouterProvider({
+    apiKey: "sk-or-test-only",
+    model: "@preset/preset-free",
+    providerPreferences: { order: ["google-ai-studio"], allow_fallbacks: false },
+    responseHealing: true,
+    fetchImpl: async (_url, init) => {
+      observed = JSON.parse(init.body);
+      return response({ id: "or-preset", choices: [{ message: { content: '{"answer":"ok"}' } }] });
+    },
+  });
+
+  await provider.generate(REQUEST);
+
+  assert.equal(observed.provider, undefined);
+  assert.deepEqual(observed.plugins, [{ id: "response-healing" }]);
 });
 
 test("provider OpenRouter normaliza tool calls e sanitiza autenticação", async () => {

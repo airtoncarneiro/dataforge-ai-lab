@@ -18,7 +18,11 @@ function normalizeUsage(value) {
   };
 }
 
-function buildRequest(request, model, { structured = true } = {}) {
+function buildRequest(request, model, {
+  structured = true,
+  providerPreferences = {},
+  responseHealing = false,
+} = {}) {
   const body = {
     model,
     messages: [{
@@ -28,11 +32,17 @@ function buildRequest(request, model, { structured = true } = {}) {
         : `${request.instructions}\n\nOutput contract fallback: return exactly one valid JSON value, with no Markdown, commentary, or code fence. It must conform to this JSON Schema:\n${JSON.stringify(request.outputSchema)}`,
     }, ...request.messages],
   };
+  // Presets own their routing configuration. Sending provider preferences can
+  // make an otherwise valid preset request ineligible for every endpoint.
+  if (!model.startsWith("@preset/")) {
+    body.provider = { require_parameters: true, ...providerPreferences };
+  }
   if (structured) {
     body.response_format = {
       type: "json_schema",
       json_schema: { name: "sql_mentor_response", strict: true, schema: request.outputSchema },
     };
+    if (responseHealing) body.plugins = [{ id: "response-healing" }];
   }
   if (request.tools.length > 0) {
     body.tools = request.tools.map((tool) => ({
@@ -123,23 +133,38 @@ async function readPayload(response) {
   };
 }
 
-export class OpenRouterProvider {
+export class OpenAICompatibleProvider {
   #apiKey;
   #model;
   #fetch;
   #baseUrl;
   #structuredFallback;
+  #providerPreferences;
+  #responseHealing;
+  #providerName;
 
-  constructor({ apiKey, model, fetchImpl = globalThis.fetch, baseUrl = DEFAULT_BASE_URL, structuredFallback = false }) {
+  constructor({
+    apiKey,
+    model,
+    fetchImpl = globalThis.fetch,
+    baseUrl = DEFAULT_BASE_URL,
+    structuredFallback = false,
+    providerPreferences = {},
+    responseHealing = false,
+    providerName = "openai-compatible",
+  }) {
     this.#apiKey = required(apiKey, "missing_openrouter_api_key", "OpenRouter API key is missing.");
     this.#model = required(model, "missing_model", "The LLM provider model is not configured.");
     if (typeof fetchImpl !== "function") throw new LlmConfigurationError("missing_fetch", "A fetch implementation is required.");
     this.#fetch = fetchImpl;
     this.#baseUrl = required(baseUrl, "invalid_base_url", "OpenRouter base URL is missing.").replace(/\/$/, "");
     this.#structuredFallback = structuredFallback === true;
+    this.#providerPreferences = providerPreferences;
+    this.#responseHealing = responseHealing === true;
+    this.#providerName = providerName;
   }
 
-  get name() { return "openrouter"; }
+  get name() { return this.#providerName; }
   get model() { return this.#model; }
 
   async generate(request) {
@@ -147,7 +172,11 @@ export class OpenRouterProvider {
     const send = (structured) => this.#fetch(`${this.#baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.#apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildRequest(request, this.#model, { structured })),
+      body: JSON.stringify(buildRequest(request, this.#model, {
+        structured,
+        providerPreferences: this.#providerPreferences,
+        responseHealing: this.#responseHealing,
+      })),
       signal: request.signal,
     });
     try {
@@ -198,3 +227,6 @@ export class OpenRouterProvider {
     return { type: "output", output: ensureStructuredJson(output), toolCalls, requestId: typeof payload.id === "string" ? payload.id : null, usage: normalizeUsage(payload.usage) };
   }
 }
+
+// Backwards-compatible export for callers that used the old provider name.
+export const OpenRouterProvider = OpenAICompatibleProvider;

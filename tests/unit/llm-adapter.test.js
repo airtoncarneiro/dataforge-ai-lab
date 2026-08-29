@@ -268,6 +268,21 @@ test("OpenRouter é configurável sem vazar a chave", () => {
   assert.doesNotMatch(JSON.stringify(adapter.configuration), /sk-or-sensitive-value/);
 });
 
+test("OpenRouter aceita preferências de rota e Response Healing por ambiente", () => {
+  const adapter = createLlmAdapterFromEnv({
+    LLM_PROVIDER: "openrouter",
+    OPENROUTER_API_KEY: "sk-or-sensitive-value",
+    OPENAI_MODEL: "google/gemini-2.5-flash",
+    LLM_POLICY_VERSION: "prompt-v7",
+    OPENROUTER_PROVIDER_ORDER: "google-ai-studio",
+    OPENROUTER_ALLOW_FALLBACKS: "false",
+    OPENROUTER_RESPONSE_HEALING: "true",
+  }, { fetchImpl: async () => { throw new Error("not called"); } });
+
+  assert.equal(adapter.configuration.provider, "openrouter");
+  assert.equal(adapter.configuration.model, "google/gemini-2.5-flash");
+});
+
 test("erro inesperado e sanitizado sem stack, segredo ou detalhe interno", async () => {
   const sensitive = "sk-secret-value postgres://admin:password@internal/db";
   const provider = {

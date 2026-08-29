@@ -4,7 +4,14 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 ## Estado atual
 
-A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10`, o LLM Adapter `B11`, a Tutor Policy `B12`, o diagnóstico PROBE `B13`, a State Machine `B14`, a geração/seleção de exercícios `B15`, o Result Validator `B16`, o Evaluator pedagógico `B17`, o loop de terminal `B18`, a persistência/recovery `B19` e logs estruturados `B20` estão implementados. Os requisitos P1 não fazem parte desta entrega.
+A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10`, o LLM Adapter `B11`, a Tutor Policy `B12`, o diagnóstico PROBE `B13`, a State Machine `B14`, a geração/seleção de exercícios `B15`, o Result Validator `B16`, o Evaluator pedagógico `B17`, o loop de terminal `B18`, a persistência/recovery `B19`, logs estruturados `B20` e os incrementos P1 `B21-B26` estão implementados.
+
+O adaptador separa o protocolo OpenAI Responses do protocolo OpenAI-compatible
+Chat Completions. OpenRouter e OmniRouter compartilham o segundo adaptador e
+usam capacidades configuráveis para routing, fallback e Response Healing. No
+OpenRouter, `@preset/preset-free` é suportado como configuração de roteamento,
+mas a resposta ainda é validada localmente contra o schema; compatibilidade de
+transporte não é garantia de Structured Outputs para todos os modelos do preset.
 
 ## Execução local no macOS / VS Code
 
@@ -72,6 +79,19 @@ Execute os testes:
 ```bash
 npm test
 npm run test:integration
+```
+
+Para validar os cenários pedagógicos B25 sem chamadas externas:
+
+```bash
+npm run test:eval-fixtures
+```
+
+Uma avaliação ao vivo opcional usa as variáveis do `.env` e pode consumir quota
+do provider:
+
+```bash
+set -a; source .env; set +a; npm run eval:live
 ```
 
 Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:up`. Para reaplicar os scripts de inicialização em um volume vazio, use conscientemente `npm run db:reset`; esse comando remove somente o volume local deste Compose.
