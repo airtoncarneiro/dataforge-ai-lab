@@ -231,9 +231,9 @@ test("configuracao ausente falha antes de qualquer chamada externa", () => {
   );
 });
 
-test("modelo e parametros sao configuraveis por ambiente sem expor API key", () => {
+test("modelo e parametros Gemini sao configuraveis por ambiente sem expor API key", () => {
   const adapter = createLlmAdapterFromEnv({
-    LLM_PROVIDER: "openai",
+    LLM_PROVIDER: "ignored-for-google-only-runtime",
     OPENAI_API_KEY: "sk-sensitive-value",
     OPENAI_MODEL: "configured-model",
     LLM_POLICY_VERSION: "prompt-v7",
@@ -245,7 +245,7 @@ test("modelo e parametros sao configuraveis por ambiente sem expor API key", () 
   }, { fetchImpl: async () => { throw new Error("not called"); } });
 
   assert.deepEqual(adapter.configuration, {
-    provider: "openai",
+    provider: "google",
     model: "configured-model",
     policy_version: "prompt-v7",
     timeout_ms: 1234,
@@ -255,32 +255,27 @@ test("modelo e parametros sao configuraveis por ambiente sem expor API key", () 
   assert.doesNotMatch(JSON.stringify(adapter.configuration), /sk-sensitive-value/);
 });
 
-test("OpenRouter é configurável sem vazar a chave", () => {
+test("Google Gemini é configurável sem vazar a chave", () => {
   const adapter = createLlmAdapterFromEnv({
-    LLM_PROVIDER: "openrouter",
-    OPENROUTER_API_KEY: "sk-or-sensitive-value",
-    OPENAI_MODEL: "provider/model",
+    OPENAI_API_KEY: "google-sensitive-value",
+    OPENAI_MODEL: "gemma-4-26b-a4b-it",
     LLM_POLICY_VERSION: "prompt-v7",
   }, { fetchImpl: async () => { throw new Error("not called"); } });
 
-  assert.equal(adapter.configuration.provider, "openrouter");
-  assert.equal(adapter.configuration.model, "provider/model");
-  assert.doesNotMatch(JSON.stringify(adapter.configuration), /sk-or-sensitive-value/);
+  assert.equal(adapter.configuration.provider, "google");
+  assert.equal(adapter.configuration.model, "gemma-4-26b-a4b-it");
+  assert.doesNotMatch(JSON.stringify(adapter.configuration), /google-sensitive-value/);
 });
 
-test("OpenRouter aceita preferências de rota e Response Healing por ambiente", () => {
+test("Google usa apenas a configuração Gemini", () => {
   const adapter = createLlmAdapterFromEnv({
-    LLM_PROVIDER: "openrouter",
-    OPENROUTER_API_KEY: "sk-or-sensitive-value",
-    OPENAI_MODEL: "google/gemini-2.5-flash",
+    OPENAI_API_KEY: "google-sensitive-value",
+    OPENAI_MODEL: "gemma-4-26b-a4b-it",
     LLM_POLICY_VERSION: "prompt-v7",
-    OPENROUTER_PROVIDER_ORDER: "google-ai-studio",
-    OPENROUTER_ALLOW_FALLBACKS: "false",
-    OPENROUTER_RESPONSE_HEALING: "true",
   }, { fetchImpl: async () => { throw new Error("not called"); } });
 
-  assert.equal(adapter.configuration.provider, "openrouter");
-  assert.equal(adapter.configuration.model, "google/gemini-2.5-flash");
+  assert.equal(adapter.configuration.provider, "google");
+  assert.equal(adapter.configuration.model, "gemma-4-26b-a4b-it");
 });
 
 test("erro inesperado e sanitizado sem stack, segredo ou detalhe interno", async () => {

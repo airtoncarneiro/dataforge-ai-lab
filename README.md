@@ -6,12 +6,9 @@ Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL
 
 A fundação `B01-B03`, o SQL Sandbox `B04`, Execution Evidence `B05`, `EXPLAIN` seguro `B06`, os contratos pedagógicos `B07`, o Learner Model Service determinístico `B08`, o Knowledge Dependency Graph `B09`, o Adaptive Decision Service `B10`, o LLM Adapter `B11`, a Tutor Policy `B12`, o diagnóstico PROBE `B13`, a State Machine `B14`, a geração/seleção de exercícios `B15`, o Result Validator `B16`, o Evaluator pedagógico `B17`, o loop de terminal `B18`, a persistência/recovery `B19`, logs estruturados `B20` e os incrementos P1 `B21-B26` estão implementados.
 
-O adaptador separa o protocolo OpenAI Responses do protocolo OpenAI-compatible
-Chat Completions. OpenRouter e OmniRouter compartilham o segundo adaptador e
-usam capacidades configuráveis para routing, fallback e Response Healing. No
-OpenRouter, `@preset/preset-free` é suportado como configuração de roteamento,
-mas a resposta ainda é validada localmente contra o schema; compatibilidade de
-transporte não é garantia de Structured Outputs para todos os modelos do preset.
+O adaptador usa diretamente a API Google Gemini `generateContent`. O modelo
+free configurado é `gemma-4-26b-a4b-it`; a resposta JSON é solicitada pela API e
+validada localmente contra o schema antes de entrar no fluxo pedagógico.
 
 ## Execução local no macOS / VS Code
 
@@ -98,9 +95,9 @@ Os testes de integração pressupõem o PostgreSQL saudável após `npm run db:u
 
 O sandbox usa `SQL_MENTOR_SANDBOX_TIMEOUT_MS` e `SQL_MENTOR_SANDBOX_MAX_ROWS` para limitar cada consulta. A role da aplicação é fixa como `mentor_sandbox`; não configure o executor com a credencial administrativa.
 
-O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase. O Exercise Service B15 usa B11/B12 para geração estruturada, mas aplica localmente difficulty, pré-requisitos e validação de metadata. O Result Validator B16 executa aluno e referência exclusivamente pelo Sandbox, compara resultados sem equivalência textual e verifica constraints pela AST/plano; a `reference_query` trusted nunca entra no contrato público. O Evaluator B17 preserva esses fatos como authoritative, usa B11/B12 somente para interpretação pedagógica e produz `Evaluation` B07 com fallback determinístico. A coordenação B18 encadeia esses componentes, enquanto B08 continua aplicando evidências e B10 continua decidindo a ação final. B19 persiste snapshots e registros normalizados com transação e chaves idempotentes para que uma `Evaluation` e seus `MasteryChange` não sejam reaplicados. B20 emite JSON estruturado para stdout, com IDs correlacionados e redaction central de segredos, SQL e conteúdo trusted. Para OpenAI direto, use `LLM_PROVIDER=openai` e `OPENAI_API_KEY`; para OpenRouter, use `LLM_PROVIDER=openrouter`, `OPENROUTER_API_KEY` e um modelo com Structured Outputs. Em ambos os casos, configure `OPENAI_MODEL`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes não fazem chamadas reais ao provider.
+O PROBE B13 integra programaticamente o LLM Adapter B11, a Tutor Policy B12, o Knowledge Graph B09 e o Learner Model Service B08. A State Machine B14 valida a conclusão do PROBE e converte decisões B10 em transições de fase. O Exercise Service B15 usa B11/B12 para geração estruturada, mas aplica localmente difficulty, pré-requisitos e validação de metadata. O Result Validator B16 executa aluno e referência exclusivamente pelo Sandbox, compara resultados sem equivalência textual e verifica constraints pela AST/plano; a `reference_query` trusted nunca entra no contrato público. O Evaluator B17 preserva esses fatos como authoritative, usa B11/B12 somente para interpretação pedagógica e produz `Evaluation` B07 com fallback determinístico. A coordenação B18 encadeia esses componentes, enquanto B08 continua aplicando evidências e B10 continua decidindo a ação final. B19 persiste snapshots e registros normalizados com transação e chaves idempotentes para que uma `Evaluation` e seus `MasteryChange` não sejam reaplicados. B20 emite JSON estruturado para stdout, com IDs correlacionados e redaction central de segredos, SQL e conteúdo trusted. A aplicação usa exclusivamente a Gemini API com `OPENAI_API_KEY` (mantida por compatibilidade local), `OPENAI_MODEL=gemma-4-26b-a4b-it`, `LLM_POLICY_VERSION=tutor-policy-v0.1` e os limites `LLM_*` documentados em `.env.example`. Os testes não fazem chamadas reais ao provider.
 
-Para endpoints OpenAI-compatible alternativos, como OmniRouter, defina `LLM_PROVIDER=omnirouter` e `LLM_BASE_URL` (por exemplo, `http://localhost:20128/v1`). A chave deve ser aceita pelo endpoint configurado. O adapter valida localmente a saída estruturada mesmo quando o modelo roteado não oferece `json_schema` nativo.
+O fluxo não depende de OpenRouter, OmniRouter ou de um preset de roteamento.
 
 Ao terminar:
 

@@ -20,7 +20,7 @@ Sucesso estruturado:
 ```json
 {
   "status": "ok",
-  "provider": "openai",
+  "provider": "google",
   "model": "configured-model",
   "policy_version": "tutor-policy-v0.1",
   "output": {},
@@ -43,7 +43,7 @@ Falha normalizada:
 ```json
 {
   "status": "error",
-  "provider": "openai",
+  "provider": "google",
   "model": "configured-model",
   "policy_version": "tutor-policy-v0.1",
   "output": null,
@@ -62,9 +62,9 @@ Falha normalizada:
 
 Categorias publicas: `configuration_error`, `authentication_error`, `timeout`, `provider_error`, `invalid_response`, `schema_validation_error`, `invalid_tool_request` e `refusal`. Mensagens do provider, stack traces, payloads e credenciais nao sao copiados para o resultado.
 
-## Providers
+## Provider
 
-- `OpenAIResponsesProvider`: implementa a Responses API com Structured Outputs `json_schema` em modo estrito. Usa `fetch` injetavel e nao e importado pelo dominio.
+- `GoogleGeminiProvider`: implementa a Gemini API `generateContent` com `responseMimeType=application/json` e `responseJsonSchema`. Usa `fetch` injetavel e nao e importado pelo dominio.
 - `FakeLlmProvider`: executa roteiros deterministas `valid`, `invalid`, `timeout`, `provider_error`, `authentication_error` e `refusal`, sem rede.
 
 Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha tecnica marcada como transitoria. Autenticacao, recusa, configuracao e formato invalido nao sao repetidos.
@@ -72,9 +72,9 @@ Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha te
 ## Configuracao
 
 ```text
-LLM_PROVIDER=openai
+# A chave usa este nome por compatibilidade; deve ser criada no Google AI Studio.
 OPENAI_API_KEY=...
-OPENAI_MODEL=...
+OPENAI_MODEL=gemma-4-26b-a4b-it
 LLM_POLICY_VERSION=...
 LLM_TIMEOUT_MS=30000
 LLM_MAX_RETRIES=1

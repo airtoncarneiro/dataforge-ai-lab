@@ -347,9 +347,10 @@ Criar casos fixos para testar:
 Implementado em `tests/fixtures/llm-evaluation/b25-evaluation-fixtures.json`;
 os cenários permanecem sem SQL de referência e são validados deterministicamente.
 
-A execução ao vivo também está disponível em `npm run eval:live`. O preset
-gratuito do OpenRouter foi confirmado como acessível, mas não garante JSON
-válido para todos os schemas complexos; a validação local permanece obrigatória.
+A execução ao vivo também está disponível em `npm run eval:live`. Ela usa
+diretamente a Gemini API e o modelo free configurado no `.env`; a validação
+local permanece obrigatória porque a API suporta apenas um subconjunto de JSON
+Schema.
 
 ### B26 — Sandbox adversarial tests
 

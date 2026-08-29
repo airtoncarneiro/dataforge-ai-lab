@@ -8,22 +8,18 @@ Definir como a aplicação conversa com a LLM sem delegar a ela responsabilidade
 
 > A LLM produz decisões pedagógicas estruturadas; a aplicação valida, executa e persiste.
 
-## Compatibilidade de providers
+## Provider atual
 
-Compatibilidade com a API OpenAI descreve o formato do transporte, não garante
-que todos os providers aceitem os mesmos endpoints, parâmetros ou níveis de
-Structured Outputs. A aplicação mantém dois protocolos explícitos:
+A aplicação usa exclusivamente a Gemini API `generateContent`, com o modelo
+`gemma-4-26b-a4b-it` no ambiente free. A API recebe `responseMimeType` como
+`application/json` e `responseJsonSchema` com o schema da tarefa. A resposta
+continua sendo validada localmente por AJV; JSON sintaticamente válido não é
+suficiente para autorizar uma decisão pedagógica.
 
-- OpenAI Responses, usado pelo adaptador Responses;
-- OpenAI-compatible Chat Completions, compartilhado por OpenRouter e
-  OmniRouter.
-
-As diferenças de routing, fallback, streaming e plugins são capacidades do
-perfil do provider. Um preset do OpenRouter pode escolher modelos diferentes a
-cada rota. Portanto, `response_format` é uma solicitação ao provider, enquanto
-a validação AJV da aplicação é a autoridade final sobre o contrato de saída.
-Resposta inválida deve ser rejeitada ou repetida dentro do limite configurado;
-nunca deve ser aceita apenas porque veio de um endpoint compatível.
+O nome de ambiente `OPENAI_API_KEY` é mantido temporariamente por
+compatibilidade com a configuração local existente, mas a chave deve ser uma
+chave criada no Google AI Studio. Não há routing de provider, preset ou
+fallback entre modelos.
 
 ## Entrada de uma interação
 
