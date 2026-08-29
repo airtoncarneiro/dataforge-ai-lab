@@ -121,19 +121,57 @@ function normalizeUsage(usage) {
   });
 }
 
-function parseStructuredOutput(output) {
-  if (typeof output === "string") {
-    try {
-      return JSON.parse(output);
-    } catch {
-      throw new LlmProviderError({
-        category: "invalid_response",
-        code: "malformed_json",
-        message: "The LLM returned malformed structured output.",
-      });
+function balancedJsonCandidate(value) {
+  const starts = new Set(["{", "["]);
+  for (let start = 0; start < value.length; start += 1) {
+    if (!starts.has(value[start])) continue;
+    const opening = value[start];
+    const closing = opening === "{" ? "}" : "]";
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (let index = start; index < value.length; index += 1) {
+      const character = value[index];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') quoted = false;
+        continue;
+      }
+      if (character === '"') {
+        quoted = true;
+        continue;
+      }
+      if (character === "{" || character === "[") depth += 1;
+      if (character === "}" || character === "]") {
+        depth -= 1;
+        if (depth === 0 && character === closing) return value.slice(start, index + 1);
+        if (depth < 0) break;
+      }
     }
   }
-  return cloneJson(output, "provider output");
+  return null;
+}
+
+function parseStructuredOutput(output) {
+  if (typeof output !== "string") return cloneJson(output, "provider output");
+  const text = output.trim();
+  const candidates = [text];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/iu)?.[1];
+  if (fenced) candidates.push(fenced.trim());
+  const balanced = balancedJsonCandidate(text);
+  if (balanced) candidates.push(balanced);
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch { /* try the next representation */ }
+  }
+  throw new LlmProviderError({
+    category: "invalid_response",
+    code: "malformed_json",
+    message: "The LLM returned malformed structured output.",
+    retryable: true,
+  });
 }
 
 function normalizeToolCalls(toolCalls, tools) {

@@ -107,8 +107,31 @@ test("distingue JSON malformado de incompatibilidade com schema", async () => {
     category: "invalid_response",
     code: "malformed_json",
     message: "The LLM returned malformed structured output.",
-    retryable: false,
+    retryable: true,
   });
+});
+
+test("aceita JSON do Google em texto adicional ou bloco Markdown e valida o schema", async () => {
+  for (const output of [
+    'Aqui está a avaliação:\n```json\n{"message":"Tente novamente.","next_action":"retry"}\n```',
+    'Resultado: {"message":"Pratique mais.","next_action":"practice"}',
+  ]) {
+    const { adapter } = adapterFor({ type: "invalid", output });
+    const result = await adapter.generate(REQUEST);
+    assert.equal(result.status, "ok");
+    assert.equal(result.output.next_action, result.output.message === "Tente novamente." ? "retry" : "practice");
+  }
+});
+
+test("resposta JSON malformada pode ser recuperada por retry e continua validada", async () => {
+  const { adapter, provider } = adapterFor([
+    { type: "invalid", output: "texto sem JSON" },
+    { type: "valid", output: { message: "Pratique mais.", next_action: "practice" } },
+  ], { maxRetries: 1 });
+  const result = await adapter.generate(REQUEST);
+  assert.equal(result.status, "ok");
+  assert.equal(result.attempts, 2);
+  assert.equal(provider.callCount, 2);
 });
 
 test("timeout respeita limite de retries tecnicos", async () => {
