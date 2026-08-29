@@ -196,6 +196,21 @@ test("gera exercício simples válido e compatível com o contrato B07", async (
   assert.ok(Object.isFrozen(result.validation_metadata));
 });
 
+test("informa ao gerador o schema educacional permitido", async () => {
+  const { service, provider } = serviceFor([{ type: "valid", output: outputFor() }]);
+
+  await generate(service);
+
+  const directive = JSON.parse(provider.calls[0].messages.at(-1).content);
+  assert.equal(directive.available_schema.name, "education");
+  assert.deepEqual(directive.available_schema.relations.customers, [
+    "customer_id", "name", "email", "city", "created_at",
+  ]);
+  assert.deepEqual(Object.keys(directive.available_schema.relations), [
+    "categories", "customers", "departments", "employees", "order_items", "orders", "products",
+  ]);
+});
+
 test("gera exercício de JOIN com relações e skills coerentes", async () => {
   const state = learnerState({ currentConcept: "join", mastery: 0.6, confidence: "medium" });
   const { service } = serviceFor([{ type: "valid", output: joinOutput() }]);
@@ -332,6 +347,47 @@ test("regenera saída incompatível com o schema da LLM", async () => {
   assert.equal(result.status, "ok");
   assert.equal(result.attempts, 2);
   assert.equal(provider.callCount, 2);
+});
+
+test("orienta a regeneração após reference query fora do schema permitido", async () => {
+  const invalid = outputFor({
+    statement: "Na relação products, retorne o nome de cada produto para validar a consulta solicitada.",
+    referenceQuery: "SELECT nome FROM produtos",
+    sourceRelations: ["products"],
+  });
+  const { service, provider } = serviceFor([
+    { type: "valid", output: invalid },
+    { type: "valid", output: outputFor() },
+  ]);
+
+  const result = await generate(service);
+
+  assert.equal(result.status, "ok");
+  const correction = JSON.parse(provider.calls[1].messages.at(-1).content);
+  assert.equal(correction.rejected_code, "unsafe_reference_query");
+  assert.match(correction.instruction, /available_schema/u);
+});
+
+test("rejeita constraint estrutural não suportada e regenera", async () => {
+  const invalid = outputFor({
+    constraints: [{
+      kind: "query_structure",
+      target: "select_clause",
+      operator: "contains",
+      value: "name",
+    }],
+  });
+  const { service, provider } = serviceFor([
+    { type: "valid", output: invalid },
+    { type: "valid", output: outputFor() },
+  ]);
+
+  const result = await generate(service);
+
+  assert.equal(result.status, "ok");
+  assert.equal(result.attempts, 2);
+  const correction = JSON.parse(provider.calls[1].messages.at(-1).content);
+  assert.equal(correction.rejected_code, "unsupported_constraint");
 });
 
 test("rejeita reference_solution no payload proposto pela LLM", async () => {

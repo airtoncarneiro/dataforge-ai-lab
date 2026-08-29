@@ -158,6 +158,22 @@ function assertEvaluationConcepts(output, allowedConcepts, knowledgeGraph, curre
   }
 }
 
+function normalizeEvaluationPrerequisites(output, knowledgeGraph, currentConcept) {
+  const allowed = new Set(
+    knowledgeGraph.getTransitivePrerequisites(currentConcept).map((node) => node.id),
+  );
+  return {
+    ...output,
+    assessment: {
+      ...output.assessment,
+      // The LLM may suggest prerequisites, but the Knowledge Graph is
+      // authoritative. Ignore unrelated suggestions without aborting PROBE.
+      prerequisites_to_revisit: output.assessment.prerequisites_to_revisit
+        .filter((concept) => allowed.has(concept)),
+    },
+  };
+}
+
 function normalizeExecutionEvidence(input) {
   if (input === null || input === undefined) {
     return null;
@@ -454,12 +470,16 @@ export class ProbeService {
                 difficulty: entry.question.difficulty,
                 question_type: entry.question.question_type,
               },
+              allowed_prerequisites_to_revisit: this.#knowledgeGraph
+                .getTransitivePrerequisites(entry.question.concept)
+                .map((node) => node.id),
               execution_evidence: objectiveEvidence,
               constraints: {
                 assess_without_teaching: true,
                 do_not_return_feedback_hint_or_solution: true,
                 mastery_is_evidence_not_final_score: true,
                 do_not_claim_execution_without_evidence: true,
+                prerequisites_to_revisit_must_use_only_allowed_values: true,
               },
             }),
           },
@@ -477,15 +497,20 @@ export class ProbeService {
     let evaluation;
     let update;
     try {
-      assertEvaluationConcepts(
+      const normalizedOutput = normalizeEvaluationPrerequisites(
         response.output,
+        this.#knowledgeGraph,
+        entry.question.concept,
+      );
+      assertEvaluationConcepts(
+        normalizedOutput,
         entry.question.targets,
         this.#knowledgeGraph,
         entry.question.concept,
       );
       evaluation = evaluationFromOutput({
         entry,
-        output: response.output,
+        output: normalizedOutput,
         executionEvidence: objectiveEvidence,
         timestamp,
       });

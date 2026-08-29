@@ -161,6 +161,21 @@ class ScriptedApplication {
     ]);
   }
 
+  async previewSql(sql) {
+    this.calls.push(["preview", sql]);
+    return result(summary({ phase: "PRACTICE", current_exercise_id: "exercise:1" }), [
+      event("preview_execution", {
+        status: "ok",
+        columns: ["customer_id", "name"],
+        rows: [{ customer_id: 1, name: "Ana" }],
+        row_count: 1,
+        truncated: false,
+        duration_ms: 0.75,
+        error: null,
+      }),
+    ]);
+  }
+
   endSession(reason) {
     this.calls.push(["end", reason]);
     return result(summary({ status: "ended" }), [event("session_ended", {
@@ -193,6 +208,20 @@ test("sessão completa coordena PROBE, ensino, exercício e SQL multilinha", asy
     assert.match(io.output, new RegExp(`\\[${label}`));
   }
   assert.equal(io.closed, true);
+});
+
+test(".testar exibe a prévia sem avaliar e permite depois .enviar", async () => {
+  const { io, application, outcome } = await runLoop({
+    lines: ["SQL", "resposta", "SELECT customer_id FROM customers", ".testar",
+      "SELECT customer_id FROM customers", ".enviar", "sair"],
+  });
+  assert.equal(outcome.reason, "manual_exit");
+  assert.deepEqual(application.calls.slice(3, 5), [
+    ["preview", "SELECT customer_id FROM customers"],
+    ["sql", "SELECT customer_id FROM customers"],
+  ]);
+  assert.match(io.output, /\[PRÉVIA SQL\]/u);
+  assert.match(io.output, /\[RESULTADO SQL\]/u);
 });
 
 for (const action of ["retry", "reteach", "practice", "advance", "review"]) {

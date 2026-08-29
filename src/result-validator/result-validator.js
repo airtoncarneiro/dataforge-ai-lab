@@ -262,6 +262,13 @@ export class ResultValidator {
     this.#sandbox = sandbox;
   }
 
+  // Preview is an execution-only path for the terminal. It deliberately does
+  // not consume exercise metadata and never performs objective/pedagogical
+  // validation; SQL still runs through the same Sandbox policy and limits.
+  async preview(studentSql) {
+    return this.#sandbox.execute(requiredString(studentSql, "studentSql"));
+  }
+
   async validate(input) {
     const value = record(input, "ResultValidatorInput");
     exactKeys(value, [
@@ -486,4 +493,3 @@ export class ResultValidator {
     });
   }
 }
-

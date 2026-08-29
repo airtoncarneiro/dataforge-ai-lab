@@ -1,6 +1,14 @@
 import { createAdaptiveDecision } from "../adaptive-decision/index.js";
 import { KnowledgeGraph, SQL_KNOWLEDGE_GRAPH } from "../knowledge-graph/index.js";
-import { SqlPolicy, SqlPolicyError } from "../sandbox/sql-policy.js";
+import {
+  DEFAULT_EDUCATION_SCHEMA,
+  SqlPolicy,
+  SqlPolicyError,
+} from "../sandbox/sql-policy.js";
+import {
+  assertSupportedConstraints,
+} from "../result-validator/constraints.js";
+import { ResultValidatorConfigurationError } from "../result-validator/contracts.js";
 import { createTutorPolicyContextBuilder } from "../tutor-policy/index.js";
 import {
   EXERCISE_DIFFICULTY_TARGETS,
@@ -339,6 +347,27 @@ function collectAllowedRelations(ast, allowedRelations) {
   return [...found].sort();
 }
 
+function projectedColumnNames(ast) {
+  if (!ast || typeof ast !== "object") return null;
+  if (ast.type === "select") {
+    if (!Array.isArray(ast.columns)) return null;
+    const names = [];
+    for (const column of ast.columns) {
+      if (typeof column?.alias?.name === "string") {
+        names.push(column.alias.name);
+      } else if (column?.expr?.type === "ref" && typeof column.expr.name === "string") {
+        names.push(column.expr.name);
+      } else {
+        return null;
+      }
+    }
+    return names;
+  }
+  if (ast.type === "with" || ast.type === "with recursive") return projectedColumnNames(ast.in);
+  if (ast.type === "union" || ast.type === "union all") return projectedColumnNames(ast.left);
+  return null;
+}
+
 function assertReferenceQuery(metadata, sqlPolicy) {
   const referenceQuery = metadata.reference_query;
   const strategyNeedsReference = ["RESULT_SET", "ORDERED_RESULT"].includes(
@@ -371,6 +400,13 @@ function assertReferenceQuery(metadata, sqlPolicy) {
     fail(
       "source_relation_mismatch",
       "source_relations deve corresponder às relações usadas pela reference_query.",
+    );
+  }
+  const projected = projectedColumnNames(approved.ast);
+  if (projected !== null && !sameValues(projected, metadata.expected_columns)) {
+    fail(
+      "reference_columns_mismatch",
+      "expected_columns deve corresponder às colunas projetadas pela reference_query.",
     );
   }
 }
@@ -434,6 +470,7 @@ function assertMetadataConsistency({ generated, targetConcepts, knowledgeGraph, 
       fail("insufficient_metadata", "PLAN_CONSTRAINT exige uma constraint de plano.");
     }
   }
+  assertSupportedConstraints(metadata.constraints, metadata.expected_columns);
 
   const serializedConstraints = metadata.constraints.map((item) => JSON.stringify(item));
   if (new Set(serializedConstraints).size !== serializedConstraints.length) {
@@ -458,7 +495,14 @@ function exerciseDirective({
   context,
   knowledgeGraph,
   adaptiveDecision,
+  sqlPolicy,
 }) {
+  const relations = Object.fromEntries(
+    [...sqlPolicy.allowedRelations]
+      .sort()
+      .filter((relation) => Object.hasOwn(DEFAULT_EDUCATION_SCHEMA, relation))
+      .map((relation) => [relation, [...DEFAULT_EDUCATION_SCHEMA[relation]]]),
+  );
   return Object.freeze({
     kind: "exercise_generation_directive",
     policy_version: EXERCISE_POLICY_VERSION,
@@ -476,6 +520,10 @@ function exerciseDirective({
         next_concept: adaptiveDecision.next_concept,
         policy_version: adaptiveDecision.policy_version,
       },
+    available_schema: {
+      name: sqlPolicy.allowedSchema,
+      relations,
+    },
     constraints: {
       generate_sql_exercise_only: true,
       use_exact_target_concepts: true,
@@ -485,6 +533,7 @@ function exerciseDirective({
       reference_query_is_trusted_metadata_only: true,
       statement_must_not_contain_the_reference_query: true,
       do_not_execute_sql: true,
+      use_only_available_schema_relations_and_columns: true,
     },
   });
 }
@@ -607,6 +656,7 @@ export class ExerciseService {
       context,
       knowledgeGraph: this.#knowledgeGraph,
       adaptiveDecision,
+      sqlPolicy: this.#sqlPolicy,
     });
     const request = {
       ...baseRequest,
@@ -629,9 +679,23 @@ export class ExerciseService {
 
     let lastValidationCode = "invalid_generated_exercise";
     for (let attempts = 1; attempts <= this.#maxGenerationAttempts; attempts += 1) {
+      const attemptRequest = attempts === 1 ? request : {
+        ...request,
+        messages: [
+          ...request.messages,
+          {
+            role: "user",
+            content: JSON.stringify({
+              kind: "exercise_generation_correction",
+              rejected_code: lastValidationCode,
+              instruction: "Generate a new exercise. Use only available_schema table and column names in validation_metadata.reference_query.",
+            }),
+          },
+        ],
+      };
       let response;
       try {
-        response = await this.#adapter.generate(request);
+        response = await this.#adapter.generate(attemptRequest);
       } catch {
         return generationFailure({
           attempts,
@@ -686,7 +750,9 @@ export class ExerciseService {
       } catch (error) {
         lastValidationCode = error instanceof ExerciseValidationError
           ? error.code
-          : "invalid_generated_exercise";
+          : error instanceof ResultValidatorConfigurationError
+            ? error.code
+            : "invalid_generated_exercise";
         if (attempts === this.#maxGenerationAttempts) {
           return generationFailure({
             attempts,

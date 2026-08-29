@@ -255,6 +255,19 @@ test("modelo e parametros sao configuraveis por ambiente sem expor API key", () 
   assert.doesNotMatch(JSON.stringify(adapter.configuration), /sk-sensitive-value/);
 });
 
+test("OpenRouter é configurável sem vazar a chave", () => {
+  const adapter = createLlmAdapterFromEnv({
+    LLM_PROVIDER: "openrouter",
+    OPENROUTER_API_KEY: "sk-or-sensitive-value",
+    OPENAI_MODEL: "provider/model",
+    LLM_POLICY_VERSION: "prompt-v7",
+  }, { fetchImpl: async () => { throw new Error("not called"); } });
+
+  assert.equal(adapter.configuration.provider, "openrouter");
+  assert.equal(adapter.configuration.model, "provider/model");
+  assert.doesNotMatch(JSON.stringify(adapter.configuration), /sk-or-sensitive-value/);
+});
+
 test("erro inesperado e sanitizado sem stack, segredo ou detalhe interno", async () => {
   const sensitive = "sk-secret-value postgres://admin:password@internal/db";
   const provider = {

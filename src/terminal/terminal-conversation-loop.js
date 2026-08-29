@@ -40,7 +40,7 @@ export class TerminalConversationLoop {
   #presentedExerciseId = null;
 
   constructor({ application, io, maxDisplayRows = 20 }) {
-    if (!application || ["start", "submitProbeAnswer", "prepareLearningCycle", "submitSql"]
+    if (!application || ["start", "submitProbeAnswer", "prepareLearningCycle", "submitSql", "previewSql"]
       .some((method) => typeof application[method] !== "function")) {
       throw new TypeError("TerminalConversationLoop requer a aplicação B18.");
     }
@@ -96,6 +96,21 @@ export class TerminalConversationLoop {
           && this.#presentedExerciseId === this.#lastSession.current_exercise_id) {
           const submission = await this.#readSql();
           if (submission.reason !== null) return await this.#finish(submission.reason);
+          if (submission.action === "preview") {
+            try {
+              result = await this.#application.previewSql(submission.sql);
+              this.#accept(result);
+              // A preview is deliberately non-authoritative: even when the
+              // sandbox/provider is unavailable, keep the exercise active so
+              // the learner can correct/retry or submit later.
+              if (eventError(result.events)) {
+                this.#io.write("[ERRO] Não foi possível pré-visualizar a SQL; tente novamente ou use .enviar.");
+              }
+            } catch {
+              this.#io.write("[ERRO] Não foi possível pré-visualizar a SQL; tente novamente ou use .enviar.");
+            }
+            continue;
+          }
           this.#presentedExerciseId = null;
           result = await this.#application.submitSql(submission.sql);
           this.#accept(result);
@@ -138,7 +153,7 @@ export class TerminalConversationLoop {
   }
 
   async #readSql() {
-    this.#io.write("Digite a SQL em uma ou mais linhas. Finalize com .enviar em uma linha separada.");
+    this.#io.write("Digite a SQL em uma ou mais linhas. Use .testar para ver o resultado ou .enviar para avaliar.");
     const lines = [];
     while (true) {
       const line = await this.#io.readLine(lines.length === 0 ? "sql> " : "...> ");
@@ -148,12 +163,13 @@ export class TerminalConversationLoop {
       if (lines.length === 0 && exitCommand(line)) {
         return { sql: null, reason: "manual_exit" };
       }
-      if (line.trim().toLowerCase() === ".enviar") {
+      const command = line.trim().toLowerCase();
+      if (command === ".enviar" || command === ".testar") {
         if (lines.join("\n").trim() === "") {
           this.#io.write("[ERRO] Escreva uma consulta antes de .enviar.");
           continue;
         }
-        return { sql: lines.join("\n"), reason: null };
+        return { sql: lines.join("\n"), action: command === ".testar" ? "preview" : "submit", reason: null };
       }
       lines.push(line);
     }
@@ -194,6 +210,15 @@ export class TerminalConversationLoop {
         break;
       case "execution":
         this.#io.write(`\n[RESULTADO SQL] status=${data.status} duração=${data.duration_ms.toFixed(2)}ms`);
+        if (data.error) {
+          this.#io.write(`Erro: ${data.error.category} — ${data.error.message}`);
+        } else {
+          this.#io.write(table(data.columns, data.rows, this.#maxDisplayRows));
+          this.#io.write(`Linhas: ${data.row_count}${data.truncated ? " (resultado truncado)" : ""}`);
+        }
+        break;
+      case "preview_execution":
+        this.#io.write(`\n[PRÉVIA SQL] status=${data.status} duração=${data.duration_ms.toFixed(2)}ms`);
         if (data.error) {
           this.#io.write(`Erro: ${data.error.category} — ${data.error.message}`);
         } else {

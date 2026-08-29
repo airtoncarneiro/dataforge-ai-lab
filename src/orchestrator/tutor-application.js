@@ -142,6 +142,18 @@ function executionEvent(validation, evaluation) {
   });
 }
 
+function previewExecutionEvent(execution) {
+  return createApplicationEvent("preview_execution", {
+    status: execution.status,
+    columns: execution.columns ?? [],
+    rows: execution.rows ?? [],
+    row_count: execution.row_count ?? 0,
+    truncated: execution.truncated ?? false,
+    duration_ms: execution.duration_ms ?? 0,
+    error: execution.error ?? null,
+  });
+}
+
 function feedbackEvent(evaluatorResult) {
   return createApplicationEvent("feedback", {
     correct: evaluatorResult.objective_assessment.correct,
@@ -659,6 +671,22 @@ export class TutorApplication {
     }
   }
 
+  async previewSql(sql) {
+    this.#requireActivePhase("PRACTICE");
+    const studentSql = string(sql, "sql");
+    if (this.#session.current_exercise === null) fail("missing_exercise", "Não existe exercício ativo.");
+    if (typeof this.#resultValidator.preview !== "function") {
+      fail("preview_unavailable", "A prévia SQL não está disponível nesta configuração.");
+    }
+    const execution = await this.#resultValidator.preview(studentSql);
+    this.#log("info", "sql.previewed", {
+      status: execution.status,
+      operation: { duration_ms: execution.duration_ms },
+      data: { row_count: execution.row_count, truncated: execution.truncated },
+    });
+    return createApplicationResult(this.#session, [previewExecutionEvent(execution)]);
+  }
+
   async endSession(reason = "manual_exit") {
     if (this.#session === null) return null;
     if (!EXITABLE_SESSION_STATUSES.has(this.#session.status)) {
@@ -740,8 +768,8 @@ export class TutorApplication {
     await this.#persist();
     this.#log("error", "session.failed", {
       status: "error",
-      error: safe,
-      data: { failed_event: failedEvent },
+      error: probe.error,
+      data: { failed_event: "probe_completed" },
     });
     return createApplicationResult(this.#session, events);
   }

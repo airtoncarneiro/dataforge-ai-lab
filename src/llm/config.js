@@ -1,6 +1,7 @@
 import { LlmAdapter } from "./llm-adapter.js";
 import { LlmConfigurationError } from "./errors.js";
 import { OpenAIResponsesProvider } from "./providers/openai-responses-provider.js";
+import { OpenRouterProvider } from "./providers/openrouter-provider.js";
 
 function required(value, variableName) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -42,7 +43,7 @@ function optionalNumber(value, variableName, { min, max }) {
 
 function loadLlmConfig(env = process.env) {
   const provider = (env.LLM_PROVIDER ?? "openai").trim().toLowerCase();
-  if (provider !== "openai") {
+  if (!["openai", "openrouter", "omnirouter"].includes(provider)) {
     throw new LlmConfigurationError(
       "unsupported_provider",
       "The configured LLM provider is not supported.",
@@ -68,7 +69,12 @@ function loadLlmConfig(env = process.env) {
 
   return Object.freeze({
     provider,
-    apiKey: required(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
+    apiKey: ["openrouter", "omnirouter"].includes(provider)
+      ? required(
+        env.OMNIROUTER_API_KEY ?? env.OPENROUTER_API_KEY ?? env.OPENAI_API_KEY,
+        provider === "omnirouter" ? "OMNIROUTER_API_KEY" : "OPENROUTER_API_KEY",
+      )
+      : required(env.OPENAI_API_KEY, "OPENAI_API_KEY"),
     model: required(env.OPENAI_MODEL, "OPENAI_MODEL"),
     policyVersion: required(env.LLM_POLICY_VERSION, "LLM_POLICY_VERSION"),
     timeoutMs: integer(env.LLM_TIMEOUT_MS, "LLM_TIMEOUT_MS", 30_000, { min: 1 }),
@@ -82,11 +88,15 @@ export function createLlmAdapterFromEnv(
   { fetchImpl = globalThis.fetch, logger } = {},
 ) {
   const config = loadLlmConfig(env);
-  const provider = new OpenAIResponsesProvider({
-    apiKey: config.apiKey,
-    model: config.model,
-    fetchImpl,
-  });
+  const provider = ["openrouter", "omnirouter"].includes(config.provider)
+    ? new OpenRouterProvider({
+      apiKey: config.apiKey,
+      model: config.model,
+      fetchImpl,
+      baseUrl: env.LLM_BASE_URL ?? (config.provider === "omnirouter" ? "http://localhost:20128/v1" : undefined),
+      structuredFallback: config.provider === "omnirouter",
+    })
+    : new OpenAIResponsesProvider({ apiKey: config.apiKey, model: config.model, fetchImpl, baseUrl: env.LLM_BASE_URL });
   return new LlmAdapter({
     provider,
     policyVersion: config.policyVersion,

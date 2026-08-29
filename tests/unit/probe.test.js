@@ -209,6 +209,33 @@ test("resposta incorreta reduz dificuldade e investiga prerequisite", async () =
   assert.equal(next.history[1].question.intent, "prerequisite_check");
 });
 
+test("normaliza sugestão de prerequisite fora do grafo sem encerrar o PROBE", async () => {
+  const { service, session, provider } = await startJoinProbe([
+    question({ concept: "join", targets: ["join", "select"] }),
+    evaluation({
+      concepts: ["join"],
+      correct: false,
+      direction: "down",
+      prerequisites: ["select", "aggregate_functions"],
+    }),
+    question({
+      concept: "select",
+      difficulty: 2,
+      questionType: "explanatory",
+    }),
+  ]);
+
+  const next = await service.submitAnswer(session, { answer: "JOIN ordena linhas." });
+
+  assert.equal(next.status, "active");
+  assert.deepEqual(next.history[0].evaluation.assessment.prerequisites_to_revisit, ["select"]);
+  assert.equal(next.current_concept, "select");
+  const directive = JSON.parse(provider.calls[1].messages.at(-1).content);
+  assert.ok(directive.allowed_prerequisites_to_revisit.includes("select"));
+  assert.ok(directive.allowed_prerequisites_to_revisit.includes("null"));
+  assert.ok(!directive.allowed_prerequisites_to_revisit.includes("aggregate_functions"));
+});
+
 test("misconception detectada permanece estruturada e limita mastery", async () => {
   const misconception = {
     concept: "join",

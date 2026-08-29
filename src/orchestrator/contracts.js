@@ -31,6 +31,7 @@ export const APPLICATION_EVENT_TYPES = Object.freeze([
   "review_placeholder",
   "exercise",
   "execution",
+  "preview_execution",
   "feedback",
   "progress",
   "decision",

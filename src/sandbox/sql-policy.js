@@ -17,6 +17,18 @@ export const DEFAULT_ALLOWED_RELATIONS = Object.freeze([
   "products",
 ]);
 
+// Stable, non-sensitive description of the educational dataset. It is shared
+// with exercise generation so an LLM never has to invent table or column names.
+export const DEFAULT_EDUCATION_SCHEMA = Object.freeze({
+  categories: Object.freeze(["category_id", "name"]),
+  customers: Object.freeze(["customer_id", "name", "email", "city", "created_at"]),
+  departments: Object.freeze(["department_id", "name"]),
+  employees: Object.freeze(["employee_id", "name", "department_id", "manager_id", "hired_at", "salary"]),
+  order_items: Object.freeze(["order_id", "product_id", "quantity", "unit_price", "discount_percent"]),
+  orders: Object.freeze(["order_id", "customer_id", "employee_id", "ordered_at", "shipped_at", "status"]),
+  products: Object.freeze(["product_id", "category_id", "name", "unit_price", "stock_quantity", "discontinued_at"]),
+});
+
 export const DEFAULT_ALLOWED_FUNCTIONS = Object.freeze([
   "abs",
   "age",
