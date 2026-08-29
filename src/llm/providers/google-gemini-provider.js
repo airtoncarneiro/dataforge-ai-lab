@@ -1,6 +1,21 @@
 import { LlmConfigurationError, LlmProviderError } from "../errors.js";
 
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_SCHEMA_KEYS = new Set([
+  "$id", "$defs", "$ref", "$anchor", "type", "format", "title", "description",
+  "enum", "items", "prefixItems", "minItems", "maxItems", "minimum", "maximum",
+  "anyOf", "oneOf", "properties", "additionalProperties", "required", "propertyOrdering",
+]);
+
+function normalizeGeminiSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(normalizeGeminiSchema);
+  if (schema === null || typeof schema !== "object") return schema;
+  return Object.fromEntries(Object.entries(schema)
+    .filter(([key]) => GEMINI_SCHEMA_KEYS.has(key))
+    .map(([key, value]) => [key, key === "properties" || key === "$defs"
+      ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, normalizeGeminiSchema(child)]))
+      : normalizeGeminiSchema(value)]));
+}
 
 function required(value, code, message) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -27,7 +42,7 @@ function buildRequest(request) {
     })),
     generationConfig: {
       responseMimeType: "application/json",
-      responseJsonSchema: request.outputSchema,
+      responseJsonSchema: normalizeGeminiSchema(request.outputSchema),
     },
   };
   const { maxOutputTokens, temperature, topP } = request.parameters;
@@ -38,7 +53,7 @@ function buildRequest(request) {
     body.tools = [{ functionDeclarations: request.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
-      parameters: tool.inputSchema,
+      parameters: normalizeGeminiSchema(tool.inputSchema),
     })) }];
   }
   return body;

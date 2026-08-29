@@ -56,3 +56,37 @@ test("Google Gemini traduz contrato neutro para generateContent estruturado", as
     topP: 0.9,
   });
 });
+
+test("Google Gemini remove keywords fora do subconjunto de JSON Schema sem alterar o contrato local", async () => {
+  let observed;
+  const provider = new GoogleGeminiProvider({
+    apiKey: "google-test-only",
+    model: "gemma-4-26b-a4b-it",
+    fetchImpl: async (_url, init) => {
+      observed = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] }, finishReason: "STOP" }] };
+        },
+      };
+    },
+  });
+
+  const schema = {
+    type: "object",
+    properties: { answer: { type: "string", minLength: 1, pattern: "^[A-Z]+$", description: "answer" } },
+    required: ["answer"],
+    additionalProperties: false,
+  };
+  await provider.generate({ ...REQUEST, outputSchema: schema });
+  assert.deepEqual(observed.generationConfig.responseJsonSchema, {
+    type: "object",
+    properties: { answer: { type: "string", description: "answer" } },
+    required: ["answer"],
+    additionalProperties: false,
+  });
+  assert.equal(schema.properties.answer.minLength, 1);
+  assert.equal(schema.properties.answer.pattern, "^[A-Z]+$");
+});
