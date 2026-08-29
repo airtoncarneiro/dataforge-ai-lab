@@ -74,7 +74,7 @@ Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha te
 ```text
 # Chave criada no Google AI Studio.
 GOOGLE_API_KEY=...
-OPENAI_MODEL=gemma-4-26b-a4b-it
+OPENAI_MODEL=gemma-4-31b-it
 LLM_POLICY_VERSION=...
 LLM_TIMEOUT_MS=30000
 LLM_MAX_RETRIES=1
