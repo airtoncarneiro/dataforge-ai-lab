@@ -1,6 +1,7 @@
 import { LlmAdapter } from "./llm-adapter.js";
 import { LlmConfigurationError } from "./errors.js";
 import { GoogleGeminiProvider } from "./providers/google-gemini-provider.js";
+import { OmniRouteProvider } from "./providers/omniroute-provider.js";
 
 function required(value, variableName) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -58,15 +59,17 @@ function loadLlmConfig(env = process.env) {
     parameters.topP = topP;
   }
 
+  const provider = (env.LLM_PROVIDER ?? "omniroute").trim().toLowerCase();
+  if (!["google", "omniroute"].includes(provider)) throw new LlmConfigurationError("invalid_llm_provider", "LLM_PROVIDER must be google or omniroute.");
   return Object.freeze({
-    provider: "google",
-    apiKey: required(env.GOOGLE_API_KEY ?? env.OPENAI_API_KEY, "GOOGLE_API_KEY"),
+    provider,
+    apiKey: required(provider === "omniroute" ? (env.OMNIROUTE_API_KEY ?? env.OPENAI_API_KEY) : (env.GOOGLE_API_KEY ?? env.OPENAI_API_KEY), provider === "omniroute" ? "OMNIROUTE_API_KEY" : "GOOGLE_API_KEY"),
     model: required(env.OPENAI_MODEL, "OPENAI_MODEL"),
     policyVersion: required(env.LLM_POLICY_VERSION, "LLM_POLICY_VERSION"),
     timeoutMs: integer(env.LLM_TIMEOUT_MS, "LLM_TIMEOUT_MS", 30_000, { min: 1 }),
     maxRetries: integer(env.LLM_MAX_RETRIES, "LLM_MAX_RETRIES", 1),
     parameters: Object.freeze(parameters),
-    baseUrl: env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta",
+    baseUrl: provider === "omniroute" ? (env.OMNIROUTE_BASE_URL ?? "http://localhost:20128/v1") : (env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta"),
   });
 }
 
@@ -75,14 +78,19 @@ export function createLlmAdapterFromEnv(
   { fetchImpl = globalThis.fetch, logger } = {},
 ) {
   const config = loadLlmConfig(env);
-  const provider = new GoogleGeminiProvider({
+  const llmProvider = config.provider === "omniroute" ? new OmniRouteProvider({
+    apiKey: config.apiKey,
+    model: config.model,
+    fetchImpl,
+    baseUrl: config.baseUrl,
+  }) : new GoogleGeminiProvider({
     apiKey: config.apiKey,
     model: config.model,
     fetchImpl,
     baseUrl: config.baseUrl,
   });
   return new LlmAdapter({
-    provider,
+    provider: llmProvider,
     policyVersion: config.policyVersion,
     timeoutMs: config.timeoutMs,
     maxRetries: config.maxRetries,

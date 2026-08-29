@@ -8,3 +8,4 @@ export { LlmAdapter } from "./llm-adapter.js";
 export { FakeLlmProvider } from "./providers/fake-llm-provider.js";
 export { DemoLlmProvider } from "./providers/demo-llm-provider.js";
 export { GoogleGeminiProvider } from "./providers/google-gemini-provider.js";
+export { OmniRouteProvider } from "./providers/omniroute-provider.js";

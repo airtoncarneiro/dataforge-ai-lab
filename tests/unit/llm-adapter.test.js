@@ -246,17 +246,17 @@ test("tool desconhecida e rejeitada sem execucao", async () => {
 test("configuracao ausente falha antes de qualquer chamada externa", () => {
   assert.throws(
     () => createLlmAdapterFromEnv({
-      LLM_PROVIDER: "openai",
+      LLM_PROVIDER: "omniroute",
       OPENAI_MODEL: "configured-model",
       LLM_POLICY_VERSION: "policy-v1",
     }),
-    (error) => error instanceof LlmConfigurationError && error.code === "missing_google_api_key",
+    (error) => error instanceof LlmConfigurationError && error.code === "missing_omniroute_api_key",
   );
 });
 
 test("modelo e parametros Gemini sao configuraveis por ambiente sem expor API key", () => {
   const adapter = createLlmAdapterFromEnv({
-    LLM_PROVIDER: "ignored-for-google-only-runtime",
+    LLM_PROVIDER: "google",
     OPENAI_API_KEY: "sk-sensitive-value",
     OPENAI_MODEL: "configured-model",
     LLM_POLICY_VERSION: "prompt-v7",
@@ -280,6 +280,7 @@ test("modelo e parametros Gemini sao configuraveis por ambiente sem expor API ke
 
 test("Google Gemini é configurável sem vazar a chave", () => {
   const adapter = createLlmAdapterFromEnv({
+    LLM_PROVIDER: "google",
     OPENAI_API_KEY: "google-sensitive-value",
     OPENAI_MODEL: "gemma-4-26b-a4b-it",
     LLM_POLICY_VERSION: "prompt-v7",
@@ -292,6 +293,7 @@ test("Google Gemini é configurável sem vazar a chave", () => {
 
 test("Google usa apenas a configuração Gemini", () => {
   const adapter = createLlmAdapterFromEnv({
+    LLM_PROVIDER: "google",
     OPENAI_API_KEY: "google-sensitive-value",
     OPENAI_MODEL: "gemma-4-26b-a4b-it",
     LLM_POLICY_VERSION: "prompt-v7",

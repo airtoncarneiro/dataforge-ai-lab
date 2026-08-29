@@ -10,9 +10,9 @@ Definir como a aplicação conversa com a LLM sem delegar a ela responsabilidade
 
 ## Provider atual
 
-A aplicação usa exclusivamente a Gemini API `generateContent`, com o modelo
-`gemma-4-26b-a4b-it` no ambiente free. A API recebe `responseMimeType` como
-`application/json` e `responseJsonSchema` com o schema da tarefa. A resposta
+A aplicação usa o OmniRoute local através do endpoint OpenAI-compatible
+`/v1/chat/completions`, com `model=antigravity/gemini-3.6-flash-high` e `response_format` no modo
+`json_schema`. A resposta
 continua sendo validada localmente por AJV; JSON sintaticamente válido não é
 suficiente para autorizar uma decisão pedagógica.
 

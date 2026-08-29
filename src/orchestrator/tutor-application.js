@@ -578,6 +578,11 @@ export class TutorApplication {
           return createApplicationResult(this.#session, events);
         }
         if (generated.status !== "ok") {
+          this.#log("warn", "exercise.generation_failed", {
+            status: generated.error.category,
+            attempts: generated.attempts,
+            error: generated.error,
+          });
           events.push(createApplicationEvent("error", publicError(generated.error, {
             message: "Não foi possível preparar um exercício agora.",
           })));

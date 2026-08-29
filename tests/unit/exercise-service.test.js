@@ -209,6 +209,27 @@ test("informa ao gerador o schema educacional permitido", async () => {
   assert.deepEqual(Object.keys(directive.available_schema.relations), [
     "categories", "customers", "departments", "employees", "order_items", "orders", "products",
   ]);
+  assert.deepEqual(directive.supported_validation_constraints.query_structure_targets, [
+    "query.has_join",
+    "query.has_group_by",
+    "query.has_window_function",
+    "query.has_order_by",
+    "query.has_cte",
+    "query.has_subquery",
+    "query.has_aggregate",
+    "query.has_where",
+    "query.has_having",
+    "query.has_distinct",
+  ]);
+  assert.deepEqual(directive.supported_validation_constraints.result_property_targets, [
+    "result.row_count",
+    "result.columns",
+    "result.column:<expected_column>.null_count",
+    "result.column:<expected_column>.distinct_count",
+    "result.column:<expected_column>.min",
+    "result.column:<expected_column>.max",
+    "result.column:<expected_column>.values",
+  ]);
 });
 
 test("gera exercício de JOIN com relações e skills coerentes", async () => {

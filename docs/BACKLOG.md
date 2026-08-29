@@ -369,7 +369,10 @@ Implementado:
 - rejeição de vazamento de solução com uma única regeneração sem reenviar o texto vazado;
 - intervalo configurável por `LLM_EVAL_DELAY_MS` para reduzir pressão sobre quota/rate limit;
 - servidor web local em `npm run web`, reutilizando a aplicação de terminal;
-- endpoint de saúde e API de sessão para diagnóstico, preparação do ciclo e submissão de SQL.
+- interface web local para iniciar sessão, responder ao diagnóstico, acompanhar
+  ensino/progresso, testar SQL e submeter SQL;
+- endpoint de saúde e API de sessão para diagnóstico, preparação do ciclo,
+  prévia e submissão de SQL.
 
 O gate não substitui a validação determinística: chamadas reais continuam opcionais,
 consomem quota e devem ser interpretadas junto com os testes locais e de integração.

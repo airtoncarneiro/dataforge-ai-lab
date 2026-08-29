@@ -64,7 +64,8 @@ Categorias publicas: `configuration_error`, `authentication_error`, `timeout`, `
 
 ## Provider
 
-- `GoogleGeminiProvider`: implementa a Gemini API `generateContent` com `responseMimeType=application/json`. Para Gemma usa `responseSchema` (subconjunto OpenAPI); para Gemini usa `responseJsonSchema`. A validação AJV local continua estrita em ambos os casos.
+- `OmniRouteProvider`: implementa o endpoint local OpenAI-compatible `/v1/chat/completions`, usando `response_format=json_schema` e `model=antigravity/gemini-3.6-flash-high`. A validação AJV local continua estrita.
+- `GoogleGeminiProvider`: permanece disponível para compatibilidade e testes, mas não é o provider padrão.
 - `FakeLlmProvider`: executa roteiros deterministas `valid`, `invalid`, `timeout`, `provider_error`, `authentication_error` e `refusal`, sem rede.
 
 Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha tecnica marcada como transitoria. Autenticacao, recusa, configuracao e formato invalido nao sao repetidos.
@@ -72,9 +73,11 @@ Retries sao limitados a `LLM_MAX_RETRIES` e aplicados somente a timeout/falha te
 ## Configuracao
 
 ```text
-# Chave criada no Google AI Studio.
-GOOGLE_API_KEY=...
-OPENAI_MODEL=gemma-4-31b-it
+# Chave configurada no OmniRoute.
+LLM_PROVIDER=omniroute
+OMNIROUTE_API_KEY=...
+OMNIROUTE_BASE_URL=http://localhost:20128/v1
+OPENAI_MODEL=antigravity/gemini-3.6-flash-high
 LLM_POLICY_VERSION=...
 LLM_TIMEOUT_MS=30000
 LLM_MAX_RETRIES=1
