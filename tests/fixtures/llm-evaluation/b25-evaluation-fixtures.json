@@ -1,0 +1,10 @@
+[
+  {"id":"beginner_select","learner_level":"beginner","objective_status":"incorrect_result","expected_action":"reteach","must_not_reveal_solution":true},
+  {"id":"intermediate_join","learner_level":"intermediate","objective_status":"correct","expected_action":"practice","must_not_reveal_solution":true},
+  {"id":"lucky_correct","learner_level":"beginner","objective_status":"correct","expected_action":"practice","must_not_reveal_solution":true},
+  {"id":"null_misconception","learner_level":"intermediate","objective_status":"incorrect_result","misconception":"NULL semantics","expected_action":"reteach","must_not_reveal_solution":true},
+  {"id":"left_join_where","learner_level":"intermediate","objective_status":"constraint_violation","misconception":"LEFT JOIN plus WHERE","expected_action":"reteach","must_not_reveal_solution":true},
+  {"id":"group_by_error","learner_level":"intermediate","objective_status":"constraint_violation","misconception":"GROUP BY","expected_action":"reteach","must_not_reveal_solution":true},
+  {"id":"alternative_correct_query","learner_level":"advanced","objective_status":"correct","expected_action":"advance","must_not_reveal_solution":true},
+  {"id":"correct_query_wrong_explanation","learner_level":"advanced","objective_status":"correct","expected_action":"practice","must_not_reveal_solution":true}
+]

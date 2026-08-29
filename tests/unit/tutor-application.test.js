@@ -68,7 +68,37 @@ function correctValidation() {
   });
 }
 
-async function applicationHarness({ provider = new DemoLlmProvider(), sessionStore = null, logger } = {}) {
+function technicalValidation(category = "syntax_error") {
+  return createResultValidation({
+    status: "execution_error",
+    correct: false,
+    execution: {
+      status: "error",
+      columns: [],
+      rows: [],
+      row_count: 0,
+      truncated: false,
+      duration_ms: 1.5,
+      error: { category, sqlstate: "42601", message: "Erro técnico sanitizado." },
+    },
+    expected_summary: {
+      comparison_mode: "ORDERED_RESULT",
+      expected_columns: ["customer_id", "name"],
+      expected_row_count: 4,
+      ordering_required: true,
+      reference_executed: true,
+    },
+    actual_summary: null,
+    mismatches: [],
+    constraints: [],
+    plan_evidence: null,
+    validator_policy_version: RESULT_VALIDATOR_POLICY_VERSION,
+  });
+}
+
+async function applicationHarness({
+  provider = new DemoLlmProvider(), sessionStore = null, logger, validation = correctValidation,
+} = {}) {
   const now = clock();
   const adapter = new LlmAdapter({
     provider,
@@ -106,7 +136,7 @@ async function applicationHarness({ provider = new DemoLlmProvider(), sessionSto
   const resultValidator = {
     async validate() {
       calls.push("B16");
-      return correctValidation();
+      return validation();
     },
   };
   const evaluator = {
@@ -194,6 +224,29 @@ test("estado trusted permanece interno e não aparece no resultado da aplicaçã
     JSON.stringify(prepared.events),
     /reference_query|reference_solution|validation_metadata|instructions|api[_-]?key/iu,
   );
+});
+
+test("B21 alterna pergunta socrática e pista sem expor ambas de uma vez", async () => {
+  const { app } = await applicationHarness({ validation: () => technicalValidation() });
+  await reachExercise(app);
+
+  const first = await app.submitSql("SELEC customer_id FROM customers");
+  assert.equal(first.session.last_action, "retry");
+  assert.equal(first.session.retry_count, 1);
+  assert.deepEqual(first.events.map((item) => item.type), [
+    "execution", "feedback", "socratic_retry", "progress", "decision",
+  ]);
+  assert.equal(first.events.find((item) => item.type === "feedback").data.hints.length, 0);
+  const question = first.events.find((item) => item.type === "socratic_retry").data;
+  assert.equal(question.stage, "question");
+  assert.match(question.message, /sintaxe/u);
+
+  const second = await app.submitSql("SELEC customer_id FROM customers");
+  assert.equal(second.session.last_action, "retry");
+  assert.equal(second.session.retry_count, 2);
+  const hint = second.events.find((item) => item.type === "socratic_retry").data;
+  assert.equal(hint.stage, "hint");
+  assert.doesNotMatch(JSON.stringify(second.events), /reference_query|reference_solution/iu);
 });
 
 test("modo demo produz respostas determinísticas e não chama rede", async () => {

@@ -92,7 +92,7 @@ export class TerminalConversationLoop {
           continue;
         }
 
-        if (phase === "PRACTICE" && this.#lastSession.current_exercise_id !== null
+        if (["PRACTICE", "APPLY", "TRANSFER_TEST"].includes(phase) && this.#lastSession.current_exercise_id !== null
           && this.#presentedExerciseId === this.#lastSession.current_exercise_id) {
           const submission = await this.#readSql();
           if (submission.reason !== null) return await this.#finish(submission.reason);
@@ -201,8 +201,14 @@ export class TerminalConversationLoop {
       case "teach":
         this.#io.write(`\n[TUTOR] ${data.message}\nChecagem: ${data.comprehension_check}`);
         break;
-      case "review_placeholder":
-        this.#io.write(`\n[REVISÃO] ${data.message}`);
+      case "review":
+        this.#io.write(`\n[REVISÃO] ${data.message}\nFoco: ${data.review_targets.join(", ")}`);
+        break;
+      case "apply":
+        this.#io.write(`\n[APPLY] ${data.message}\nConceitos: ${data.target_concepts.join(", ")}`);
+        break;
+      case "transfer_test":
+        this.#io.write(`\n[TRANSFER TEST] ${data.message}\nConceitos: ${data.target_concepts.join(", ")}`);
         break;
       case "exercise":
         this.#presentedExerciseId = data.id;
@@ -229,6 +235,9 @@ export class TerminalConversationLoop {
       case "feedback":
         this.#io.write(`\n[FEEDBACK DO TUTOR] ${data.message}`);
         data.hints.forEach((hint, index) => this.#io.write(`Dica ${index + 1}: ${hint}`));
+        break;
+      case "socratic_retry":
+        this.#io.write(`\n[${data.stage === "question" ? "PERGUNTA SOCRÁTICA" : "PISTA"}] ${data.message}`);
         break;
       case "progress":
         this.#io.write("\n[PROGRESSO]");

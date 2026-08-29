@@ -109,7 +109,7 @@ class ScriptedApplication {
       ]);
     }
     const prefix = this.action === "review"
-      ? [event("review_placeholder", { message: "Revisão segura." })]
+      ? [event("review", { message: "Revisão segura.", review_targets: ["select"], policy_version: "review-scheduler-policy-v1" })]
       : [];
     const id = this.action === "retry" ? "exercise:1" : "exercise:2";
     return result(summary({
@@ -125,6 +125,14 @@ class ScriptedApplication {
     const phaseByAction = {
       retry: "PRACTICE", reteach: "TEACH", practice: "PRACTICE", advance: "TEACH", review: "REVIEW",
     };
+    const socraticRetry = this.action === "retry" && technical
+      ? [event("socratic_retry", {
+        stage: "question",
+        message: "Qual parte da mensagem indica o erro de sintaxe?",
+        retry_number: 1,
+        policy_version: "socratic-retry-policy-v1",
+      })]
+      : [];
     return result(summary({
       phase: phaseByAction[this.action],
       current_concept: this.action === "advance" ? "where" : "select",
@@ -147,6 +155,7 @@ class ScriptedApplication {
         hints: correct ? [] : ["Confira as colunas."],
         conceptual_errors: [], misconceptions: [], source: "llm",
       }),
+      ...socraticRetry,
       event("progress", {
         concepts: [{
           concept: "select", mastery: correct ? 0.62 : 0.48, confidence: "low",
@@ -255,6 +264,7 @@ test("erro de sintaxe é exibido sem derrubar o processo", async () => {
   });
   assert.equal(outcome.reason, "manual_exit");
   assert.match(io.output, /syntax_error/);
+  assert.match(io.output, /\[PERGUNTA SOCRÁTICA\]/u);
   assert.doesNotMatch(io.output, /stack/iu);
 });
 

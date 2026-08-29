@@ -305,19 +305,29 @@ Implementar ciclo erro -> pergunta -> pista -> nova tentativa antes de solução
 
 Dependências: decisão `retry` de B10 e fluxo terminal B18.
 
+Implementado: pergunta de autocorreção no primeiro retry técnico e pista graduada
+no segundo, sem expor a solução de referência.
+
 ### B22 — Review scheduler
 
 Introduzir revisões cumulativas conforme histórico de conceitos.
 
 Dependências: decisão `review` de B10 e fluxo terminal B18.
 
+Implementado: revisão cumulativa de conceitos operacionalmente dominados.
+
 ### B23 — Apply
 
 Gerar caso integrado após domínio operacional suficiente.
 
+Implementado: gate determinístico de evidências e exercício integrado em `APPLY`.
+
 ### B24 — Transfer Test
 
 Gerar novo contexto com mesmos princípios e registrar resultado.
+
+Implementado: após Apply correto, gera exercício em contexto novo e o retorna ao
+mesmo caminho de execução e avaliação.
 
 ## P1 — Robustez
 
@@ -334,9 +344,15 @@ Criar casos fixos para testar:
 - query correta com abordagem diferente da referência;
 - resposta correta mas explicação conceitualmente errada.
 
+Implementado em `tests/fixtures/llm-evaluation/b25-evaluation-fixtures.json`;
+os cenários permanecem sem SQL de referência e são validados deterministicamente.
+
 ### B26 — Sandbox adversarial tests
 
 Cobrir tentativas de bypass, múltiplos statements, comentários, comandos proibidos e queries longas.
+
+Cobertura adicional registrada em `tests/unit/sql-policy.test.js`; a validação
+com PostgreSQL real permanece em `tests/integration/sql-sandbox.test.js`.
 
 ## Gate do MVP
 

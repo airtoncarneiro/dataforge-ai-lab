@@ -102,3 +102,14 @@ test("bloqueia schemas, relações e funções fora das allowlists", () => {
 test("não confunde CTE com relação de mesmo nome fora do seu escopo", () => {
   assertRejected("WITH pg_class AS (SELECT * FROM pg_class) SELECT * FROM pg_class");
 });
+
+test("B26 bloqueia bypasses com comentários, delimitadores e comandos aninhados", () => {
+  const attempts = [
+    "SELECT * FROM customers /* ; DELETE FROM customers */; DELETE FROM customers",
+    "WITH safe AS (SELECT customer_id FROM customers), attack AS (UPDATE customers SET name = 'x' RETURNING *) SELECT * FROM safe",
+    "SELECT current_setting('data_directory')",
+    "SELECT dblink_connect('host=example.invalid')",
+    "SELECT * FROM customers FOR SHARE",
+  ];
+  for (const sql of attempts) assertRejected(sql);
+});

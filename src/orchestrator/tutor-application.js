@@ -13,6 +13,9 @@ import {
   createTutorApplicationSession,
 } from "./contracts.js";
 import { assertStore } from "../persistence/contracts.js";
+import { assessApplyReadiness } from "../apply/index.js";
+import { scheduleReview } from "../review/index.js";
+import { createSocraticRetry } from "./socratic-retry-policy.js";
 
 const EXITABLE_SESSION_STATUSES = new Set(["active", "error"]);
 
@@ -154,11 +157,11 @@ function previewExecutionEvent(execution) {
   });
 }
 
-function feedbackEvent(evaluatorResult) {
+function feedbackEvent(evaluatorResult, { withHints = true } = {}) {
   return createApplicationEvent("feedback", {
     correct: evaluatorResult.objective_assessment.correct,
     message: evaluatorResult.feedback,
-    hints: evaluatorResult.hints,
+    hints: withHints ? evaluatorResult.hints : [],
     conceptual_errors: evaluatorResult.conceptual_errors.map((item) => ({
       code: item.code,
       concept: item.concept,
@@ -171,6 +174,16 @@ function feedbackEvent(evaluatorResult) {
     })),
     source: evaluatorResult.pedagogical_assessment.source,
   });
+}
+
+function socraticRetryEvent(evaluatorResult, retryCount) {
+  const executionError = evaluatorResult.evaluation.assessment.execution_error;
+  if (executionError === null) return null;
+  return createApplicationEvent("socratic_retry", createSocraticRetry({
+    executionError,
+    retryCount,
+    evaluatorHints: evaluatorResult.hints,
+  }));
 }
 
 function decisionEvent(decision) {
@@ -454,12 +467,73 @@ export class TutorApplication {
         continue;
       }
       if (phase === "REVIEW") {
-        events.push(createApplicationEvent("review_placeholder", {
-          message: "B10 solicitou REVIEW. B18 preserva a transição e retorna à prática; o agendamento cumulativo pertence a B22.",
-          current_concept: currentConcept,
+        const apply = assessApplyReadiness({ learnerState: this.#session.learner_state, currentConcept });
+        if (apply !== null) {
+          const generated = await this.#exerciseService.generate({
+            currentConcept, learnerState: this.#session.learner_state, targetDifficulty: this.#targetDifficulty,
+            pedagogicalContext: { phase: "APPLY", learning_goal: this.#session.learning_goal, integration_concepts: apply.integration_concepts, scenario_hint: "Crie um caso integrado que exija analisar, justificar e implementar uma consulta SQL.", recent_messages: [] },
+            adaptiveDecision: exerciseAdaptiveDecision(this.#session),
+          });
+          if (generated.status !== "ok") return createApplicationResult(this.#session, [createApplicationEvent("error", publicError(generated.error, { message: "Não foi possível preparar o caso integrado agora." }))]);
+          const trusted = createTrustedCurrentExercise(generated.exercise, generated.validation_metadata);
+          const at = timestamp(this.#clock);
+          const flowState = this.#stateMachine.transition(this.#session.flow_state, "apply_ready", { readiness: { kind: "apply", satisfied: true, evidence_ids: apply.evidence_ids, policy_version: apply.policy_version }, exercise_id: trusted.exercise.id, timestamp: at, reason: "B23 liberou caso integrado após domínio operacional suficiente." });
+          this.#session = createTutorApplicationSession({ ...this.#session, flow_state: flowState, current_exercise: trusted, updated_at: at });
+          await this.#persist();
+          return createApplicationResult(this.#session, [createApplicationEvent("apply", { message: "Você demonstrou domínio suficiente. Agora resolva este caso integrado e justifique suas escolhas.", target_concepts: apply.target_concepts, policy_version: apply.policy_version }), publicExerciseEvent(trusted)]);
+        }
+        const review = scheduleReview({
+          learnerState: this.#session.learner_state,
+          currentConcept,
+        });
+        events.push(createApplicationEvent("review", {
+          message: "Vamos revisar o conceito atual e recuperar conceitos anteriores antes de seguir.",
+          review_targets: review.review_targets,
+          policy_version: review.policy_version,
         }));
-        await this.#transition("review_completed", "Placeholder seguro de REVIEW concluído em B18.");
-        continue;
+        let generated;
+        try {
+          generated = await this.#exerciseService.generate({
+            currentConcept,
+            learnerState: this.#session.learner_state,
+            targetDifficulty: this.#targetDifficulty,
+            pedagogicalContext: {
+              phase: "REVIEW",
+              learning_goal: this.#session.learning_goal,
+              integration_concepts: review.integration_concepts,
+              scenario_hint: "Use recuperação ativa de conceitos anteriores no dataset educacional.",
+              recent_messages: [],
+            },
+            adaptiveDecision: exerciseAdaptiveDecision(this.#session),
+          });
+        } catch (error) {
+          events.push(createApplicationEvent("error", publicError(error, {
+            category: "review_error", code: "review_generation_failed",
+            message: "Não foi possível preparar a revisão agora.", retryable: true,
+          })));
+          return createApplicationResult(this.#session, events);
+        }
+        if (generated.status !== "ok") {
+          events.push(createApplicationEvent("error", publicError(generated.error, {
+            message: "Não foi possível preparar a revisão agora.",
+          })));
+          return createApplicationResult(this.#session, events);
+        }
+        const trusted = createTrustedCurrentExercise(generated.exercise, generated.validation_metadata);
+        const at = timestamp(this.#clock);
+        const reviewedFlow = this.#stateMachine.transition(this.#session.flow_state, "review_completed", {
+          reason: "B22 agendou revisão cumulativa e preparou exercício.", timestamp: at,
+        });
+        const flowState = this.#stateMachine.transition(reviewedFlow, "exercise_ready", {
+          reason: "Exercise Service B15 produziu exercício de revisão válido.", timestamp: at,
+          exercise_id: trusted.exercise.id,
+        });
+        this.#session = createTutorApplicationSession({
+          ...this.#session, flow_state: flowState, current_exercise: trusted, updated_at: at,
+        });
+        await this.#persist();
+        events.push(publicExerciseEvent(trusted));
+        return createApplicationResult(this.#session, events);
       }
       if (["APPLY", "TRANSFER_TEST"].includes(phase)) {
         events.push(createApplicationEvent("error", {
@@ -555,7 +629,7 @@ export class TutorApplication {
   }
 
   async submitSql(sql) {
-    this.#requireActivePhase("PRACTICE");
+    this.#requireActivePhase("PRACTICE", "APPLY", "TRANSFER_TEST");
     const studentSql = string(sql, "sql");
     const trusted = this.#session.current_exercise;
     if (trusted === null) fail("missing_exercise", "Não existe exercício ativo.");
@@ -568,9 +642,12 @@ export class TutorApplication {
       execution_evidence_id: null,
       submitted_at: at,
     });
+    const submissionPhase = this.#session.flow_state.phase;
+    const submissionEvent = submissionPhase === "APPLY" ? "apply_completed"
+      : submissionPhase === "TRANSFER_TEST" ? "transfer_test_completed" : "answer_submitted";
     let flowState = this.#stateMachine.transition(
       this.#session.flow_state,
-      "answer_submitted",
+      submissionEvent,
       {
         reason: "Aluno submeteu SQL para o exercício ativo.",
         timestamp: at,
@@ -641,11 +718,44 @@ export class TutorApplication {
         correlation: { evaluation_id: evaluatorResult.evaluation.id },
         data: { action: decision.action, reason_codes: decision.reason_codes },
       });
+      if (submissionPhase === "APPLY" && evaluatorResult.objective_assessment.correct) {
+        const generated = await this.#exerciseService.generate({
+          currentConcept: flowState.current_concept,
+          learnerState: update.learner_state,
+          targetDifficulty: this.#targetDifficulty,
+          pedagogicalContext: {
+            phase: "TRANSFER_TEST", learning_goal: this.#session.learning_goal,
+            integration_concepts: trusted.exercise.concepts.filter((concept) => concept !== flowState.current_concept),
+            scenario_hint: "Crie um novo contexto de negócio, diferente do caso Apply, para verificar transferência dos mesmos princípios.", recent_messages: [],
+          },
+          adaptiveDecision: decision,
+        });
+        if (generated.status !== "ok") throw new Error("transfer_generation_failed");
+        const transferExercise = createTrustedCurrentExercise(generated.exercise, generated.validation_metadata);
+        flowState = this.#stateMachine.transition(flowState, "transfer_test_ready", {
+          readiness: { kind: "transfer_test", satisfied: true, evidence_ids: [evaluatorResult.evaluation.id], policy_version: "transfer-readiness-policy-v1" },
+          exercise_id: transferExercise.exercise.id, timestamp: evaluatedAt,
+          reason: "B24 abriu Transfer Test após avaliação positiva de Apply.",
+        });
+        this.#session = createTutorApplicationSession({
+          ...this.#session, flow_state: flowState, learner_state: update.learner_state,
+          current_exercise: transferExercise, last_decision: decision, retry_count: 0,
+          validations: [...this.#session.validations, validation], evaluations: [...this.#session.evaluations, evaluatorResult],
+          mastery_changes: [...this.#session.mastery_changes, ...update.mastery_changes], updated_at: evaluatedAt,
+        });
+        await this.#persist();
+        return createApplicationResult(this.#session, [
+          executionEvent(validation, evaluatorResult), feedbackEvent(evaluatorResult),
+          createApplicationEvent("transfer_test", { message: "Agora aplique os mesmos princípios em um novo contexto.", target_concepts: transferExercise.exercise.concepts, policy_version: "transfer-readiness-policy-v1" }),
+          publicExerciseEvent(transferExercise), progressEvent(update.learner_state, flowState.current_concept), decisionEvent(decision),
+        ]);
+      }
       flowState = this.#stateMachine.applyAdaptiveDecision(
         flowState,
         decision,
         { timestamp: evaluatedAt },
       );
+      const retryCountBeforeDecision = this.#session.retry_count;
       const keepExercise = decision.action === "retry";
       this.#session = createTutorApplicationSession({
         ...this.#session,
@@ -660,9 +770,13 @@ export class TutorApplication {
         updated_at: evaluatedAt,
       });
       await this.#persist();
+      const retryEvent = decision.action === "retry"
+        ? socraticRetryEvent(evaluatorResult, retryCountBeforeDecision)
+        : null;
       return createApplicationResult(this.#session, [
         executionEvent(validation, evaluatorResult),
-        feedbackEvent(evaluatorResult),
+        feedbackEvent(evaluatorResult, { withHints: retryEvent === null }),
+        ...(retryEvent === null ? [] : [retryEvent]),
         progressEvent(update.learner_state, flowState.current_concept),
         decisionEvent(decision),
       ]);
@@ -740,10 +854,10 @@ export class TutorApplication {
     if (this.#session.status !== "active") fail("inactive_session", "A sessão não está ativa.");
   }
 
-  #requireActivePhase(phase) {
+  #requireActivePhase(...phases) {
     this.#requireActiveSession();
-    if (this.#session.flow_state.phase !== phase) {
-      fail("invalid_phase", `A operação exige a fase ${phase}.`);
+    if (!phases.includes(this.#session.flow_state.phase)) {
+      fail("invalid_phase", `A operação exige uma das fases: ${phases.join(", ")}.`);
     }
   }
 

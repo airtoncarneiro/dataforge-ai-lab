@@ -1,5 +1,21 @@
 # Application coordinator — B18/B20
 
+## B21 — Retry socrático
+
+Quando B10 decide `retry` por erro técnico isolado, o orquestrador preserva o
+exercício e emite uma intervenção determinística: primeiro uma pergunta para
+autocorreção, depois uma única pista graduada. O limite de retries permanece
+sob autoridade de B10/State Machine; não há exposição de solução de referência.
+
+## B22–B24 — Review, Apply e Transfer Test
+
+`REVIEW` agenda recuperação cumulativa com conceitos já evidenciados. Quando o
+gate de Apply encontra domínio operacional em pelo menos dois conceitos, abre
+um caso integrado em `APPLY`. Uma avaliação objetiva correta desse caso gera um
+`TRANSFER_TEST` em contexto novo; sua submissão retorna ao mesmo caminho de
+execução e avaliação. A conclusão da aprendizagem permanece sob os guards da
+state machine e não é inferida automaticamente.
+
 Coordena o primeiro ciclo end-to-end sem copiar regras dos serviços de domínio. `TutorApplication` mantém a sessão, entrega evidências de B16 ao B17, encaminha `Evaluation` ao B08, solicita a decisão B10 e pede à State Machine B14 que valide a transição.
 
 As responsabilidades permanecem separadas:
