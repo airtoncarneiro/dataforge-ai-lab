@@ -114,10 +114,16 @@ export class GoogleGeminiProvider {
       throw new LlmProviderError({ category: "provider_error", code: "transport_error", message: "The LLM provider could not complete the request.", retryable: true });
     }
     if (response.status === 401 || response.status === 403) {
-      throw new LlmProviderError({ category: "authentication_error", code: "provider_authentication_failed", message: "The LLM provider rejected its configured credentials." });
+      throw new LlmProviderError({ category: "authentication_error", code: "provider_authentication_failed", message: "The LLM provider rejected its configured credentials.", httpStatus: response.status });
     }
     if (!response.ok) {
-      throw new LlmProviderError({ category: "provider_error", code: "provider_http_error", message: "The LLM provider could not complete the request.", retryable: response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500 });
+      const code = response.status === 400 ? "provider_bad_request"
+        : response.status === 404 ? "provider_model_not_found"
+          : response.status === 408 ? "provider_request_timeout"
+            : response.status === 409 ? "provider_conflict"
+              : response.status === 429 ? "provider_rate_limited"
+                : response.status >= 500 ? "provider_server_error" : "provider_http_error";
+      throw new LlmProviderError({ category: "provider_error", code, message: "The LLM provider could not complete the request.", retryable: response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500, httpStatus: response.status });
     }
     let payload;
     try { payload = await response.json(); } catch {

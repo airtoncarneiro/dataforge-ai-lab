@@ -90,3 +90,20 @@ test("Google Gemini remove keywords fora do subconjunto de JSON Schema sem alter
   assert.equal(schema.properties.answer.minLength, 1);
   assert.equal(schema.properties.answer.pattern, "^[A-Z]+$");
 });
+
+test("Google Gemini classifica erros HTTP sem expor o body do provider", async () => {
+  for (const [status, code, retryable] of [[400, "provider_bad_request", false], [429, "provider_rate_limited", true]]) {
+    const provider = new GoogleGeminiProvider({
+      apiKey: "google-test-only",
+      model: "gemma-4-26b-a4b-it",
+      fetchImpl: async () => ({ ok: false, status, async json() { return { secret: "must-not-leak" }; } }),
+    });
+    await assert.rejects(() => provider.generate(REQUEST), (error) => {
+      assert.equal(error.code, code);
+      assert.equal(error.httpStatus, status);
+      assert.equal(error.retryable, retryable);
+      assert.doesNotMatch(error.message, /secret/);
+      return true;
+    });
+  }
+});

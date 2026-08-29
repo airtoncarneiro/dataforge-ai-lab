@@ -25,21 +25,25 @@ export class LlmProviderError extends Error {
     code = "provider_failure",
     message = "The LLM provider could not complete the request.",
     retryable = false,
+    httpStatus = null,
   } = {}) {
     super(message);
     this.name = "LlmProviderError";
     this.category = LLM_ERROR_CATEGORIES.includes(category) ? category : "provider_error";
     this.code = code;
     this.retryable = Boolean(retryable);
+    this.httpStatus = Number.isInteger(httpStatus) ? httpStatus : null;
   }
 }
 
 export function publicError(error) {
   const known = error instanceof LlmConfigurationError || error instanceof LlmProviderError;
-  return Object.freeze({
+  const result = {
     category: known ? error.category : "provider_error",
     code: known ? error.code : "provider_failure",
     message: known ? error.message : "The LLM provider could not complete the request.",
     retryable: known ? error.retryable : false,
-  });
+  };
+  if (known && Number.isInteger(error.httpStatus)) result.http_status = error.httpStatus;
+  return Object.freeze(result);
 }

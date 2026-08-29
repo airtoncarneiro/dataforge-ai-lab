@@ -79,6 +79,7 @@ for (const fixture of fixtures) {
     status: response.status,
     duration_ms: Date.now() - requestStarted,
     error_code: response.error?.code ?? null,
+    http_status: response.error?.http_status ?? null,
     evaluation,
   };
   records.push(record);
