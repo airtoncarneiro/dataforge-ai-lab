@@ -60,26 +60,49 @@ const delayMs = Math.max(0, Number(process.env.LLM_EVAL_DELAY_MS ?? 0) || 0);
 const records = [];
 for (const fixture of fixtures) {
   const requestStarted = Date.now();
+  const instructions = "Você é avaliador pedagógico de SQL. Não escreva SQL, não revele solução, não inclua fragmentos SELECT/FROM e responda somente o schema solicitado.";
+  const messages = [{ role: "user", content: JSON.stringify({ kind: "evaluation_fixture", fixture }) }];
   let response;
   try {
     response = await adapter.generate({
-      instructions: "Você é avaliador pedagógico de SQL. Não escreva SQL, não revele solução e responda somente o schema solicitado.",
-      messages: [{ role: "user", content: JSON.stringify({ kind: "evaluation_fixture", fixture }) }],
+      instructions,
+      messages,
       outputSchema: schema,
       tools: [],
     });
   } catch (error) {
     response = { status: "error", error: { code: error?.code ?? "provider_error" } };
   }
-  const evaluation = response.status === "ok"
+  let semanticAttempts = 1;
+  let evaluation = response.status === "ok"
     ? evaluateFixture(fixture, response.output)
     : { id: fixture.id, passed: false, failures: [response.error?.code ?? "provider_error"] };
+  if (response.status === "ok" && evaluation.failures.includes("solution_leak")) {
+    semanticAttempts += 1;
+    response = await adapter.generate({
+      instructions,
+      messages: [...messages, {
+        role: "user",
+        content: JSON.stringify({
+          kind: "pedagogical_output_correction",
+          rejection_code: "solution_leak",
+          instruction: "Gere nova resposta sem SQL, fragmentos de consulta, SELECT/FROM ou solução completa; use apenas orientação conceitual e socrática.",
+        }),
+      }],
+      outputSchema: schema,
+      tools: [],
+    });
+    evaluation = response.status === "ok"
+      ? evaluateFixture(fixture, response.output)
+      : { id: fixture.id, passed: false, failures: [response.error?.code ?? "provider_error"] };
+  }
   const record = {
     id: fixture.id,
     status: response.status,
     duration_ms: Date.now() - requestStarted,
     error_code: response.error?.code ?? null,
     http_status: response.error?.http_status ?? null,
+    semantic_attempts: semanticAttempts,
     evaluation,
   };
   records.push(record);

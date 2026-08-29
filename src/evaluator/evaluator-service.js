@@ -440,6 +440,32 @@ function assertNoObjectiveContradiction(output, validation) {
   }
 }
 
+function reconcilePedagogicalOutput(output, validation, evaluatedConcepts, knowledgeGraph) {
+  try {
+    validateOutputConcepts(output, evaluatedConcepts, knowledgeGraph);
+    assertSafePedagogicalText(output);
+    assertNoObjectiveContradiction(output, validation);
+    return null;
+  } catch (error) {
+    return error;
+  }
+}
+
+function solutionLeakCorrectionDirective() {
+  return Object.freeze({
+    role: "user",
+    content: JSON.stringify({
+      kind: "pedagogical_output_correction",
+      rejection_code: "solution_leak",
+      rules: [
+        "Return a new answer without SQL code, query fragments, SELECT/FROM examples or a complete solution.",
+        "Use only a Socratic question, conceptual feedback and graduated non-SQL hints.",
+        "Keep the required JSON schema unchanged.",
+      ],
+    }),
+  });
+}
+
 function validateOutputConcepts(output, evaluatedConcepts, knowledgeGraph) {
   const allowed = new Set(evaluatedConcepts);
   const pedagogical = output.pedagogical_assessment;
@@ -927,7 +953,7 @@ export class EvaluatorService {
       fail("reference_leak", "O contexto do Evaluator contém solução de referência.");
     }
 
-    const llmResult = await this.#adapter.generate(request);
+    let llmResult = await this.#adapter.generate(request);
     if (llmResult.status !== "ok") {
       return buildEvaluationResult({
         exercise,
@@ -943,10 +969,40 @@ export class EvaluatorService {
       });
     }
 
-    try {
-      validateOutputConcepts(llmResult.output, evaluatedConcepts, this.#knowledgeGraph);
-      assertSafePedagogicalText(llmResult.output);
-      assertNoObjectiveContradiction(llmResult.output, validation);
+    let reconciliation = reconcilePedagogicalOutput(
+      llmResult.output,
+      validation,
+      evaluatedConcepts,
+      this.#knowledgeGraph,
+    );
+    if (reconciliation instanceof EvaluatorValidationError && reconciliation.code === "solution_leak") {
+      llmResult = await this.#adapter.generate({
+        ...request,
+        messages: [...request.messages, solutionLeakCorrectionDirective()],
+      });
+      if (llmResult.status !== "ok") {
+        return buildEvaluationResult({
+          exercise,
+          attempt,
+          validation,
+          evaluatedConcepts,
+          output: null,
+          source: "deterministic_fallback",
+          llmError: publicLlmError(llmResult.error),
+          llmRequestId: llmResult.request_id,
+          tutorPolicyVersion: this.#policyBuilder.policyVersion,
+          timestamp,
+        });
+      }
+      reconciliation = reconcilePedagogicalOutput(
+        llmResult.output,
+        validation,
+        evaluatedConcepts,
+        this.#knowledgeGraph,
+      );
+    }
+
+    if (reconciliation === null) {
       return buildEvaluationResult({
         exercise,
         attempt,
@@ -959,20 +1015,19 @@ export class EvaluatorService {
         tutorPolicyVersion: this.#policyBuilder.policyVersion,
         timestamp,
       });
-    } catch (error) {
-      return buildEvaluationResult({
-        exercise,
-        attempt,
-        validation,
-        evaluatedConcepts,
-        output: null,
-        source: "deterministic_fallback",
-        llmError: reconciliationError(error),
-        llmRequestId: llmResult.request_id,
-        tutorPolicyVersion: this.#policyBuilder.policyVersion,
-        timestamp,
-      });
     }
+    return buildEvaluationResult({
+      exercise,
+      attempt,
+      validation,
+      evaluatedConcepts,
+      output: null,
+      source: "deterministic_fallback",
+      llmError: reconciliationError(reconciliation),
+      llmRequestId: llmResult.request_id,
+      tutorPolicyVersion: this.#policyBuilder.policyVersion,
+      timestamp,
+    });
   }
 }
 

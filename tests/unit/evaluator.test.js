@@ -609,7 +609,7 @@ test("reference solution nunca entra no request nem no feedback", async () => {
 });
 
 test("feedback que revela solução SQL é rejeitado e substituído por fallback", async () => {
-  const { service } = serviceFor([{ type: "valid", output: llmOutput({
+  const { service, provider } = serviceFor([{ type: "valid", output: llmOutput({
     message: "Use SELECT customer_id FROM customers como resposta.",
   }) }]);
   const result = await evaluate(service, {
@@ -619,6 +619,23 @@ test("feedback que revela solução SQL é rejeitado e substituído por fallback
   assert.equal(result.pedagogical_assessment.source, "deterministic_fallback");
   assert.equal(result.pedagogical_assessment.llm_error.code, "solution_leak");
   assert.doesNotMatch(result.feedback, /SELECT customer_id FROM customers/iu);
+  assert.equal(provider.callCount, 2);
+});
+
+test("feedback que vaza solução é regenerado uma vez e aceita somente saída segura", async () => {
+  const { service, provider } = serviceFor([
+    { type: "valid", output: llmOutput({ message: "Use SELECT email FROM customers como resposta." }) },
+    { type: "valid", output: llmOutput({ message: "Quais colunas o enunciado realmente solicita?" }) },
+  ]);
+  const result = await evaluate(service, {
+    validationResult: validationFor({ status: "wrong_columns" }),
+  });
+
+  assert.equal(result.pedagogical_assessment.source, "llm");
+  assert.equal(result.feedback, "Quais colunas o enunciado realmente solicita?");
+  assert.equal(provider.callCount, 2);
+  assert.match(provider.calls[1].messages.at(-1).content, /solution_leak/iu);
+  assert.doesNotMatch(JSON.stringify(provider.calls[1].messages), /SELECT email FROM customers/iu);
 });
 
 test("timeout da LLM preserva fatos objetivos com fallback determinístico", async () => {

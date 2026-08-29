@@ -365,6 +365,7 @@ Implementado:
 
 - métricas agregadas para a avaliação ao vivo dos fixtures B25;
 - carregamento opcional do `.env`, seleção de fixture e tolerância a falhas por chamada;
+- rejeição de vazamento de solução com uma única regeneração sem reenviar o texto vazado;
 - intervalo configurável por `LLM_EVAL_DELAY_MS` para reduzir pressão sobre quota/rate limit;
 - servidor web local em `npm run web`, reutilizando a aplicação de terminal;
 - endpoint de saúde e API de sessão para diagnóstico, preparação do ciclo e submissão de SQL.

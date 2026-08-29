@@ -77,7 +77,8 @@ evaluator_policy_version
   conceito correspondente;
 - misconception sugerida recebe ID próprio e referência para a evidência que a
   sustenta;
-- solução SQL completa em feedback/hint é rejeitada;
+- solução SQL completa em feedback/hint é rejeitada, regenerada uma única vez
+  sem reenviar o texto vazado e, se persistir, substituída pelo fallback;
 - B08 continua sendo o único componente que aplica `MasteryEvidence`;
 - B10 continua sendo o único componente que decide a ação final.
 
