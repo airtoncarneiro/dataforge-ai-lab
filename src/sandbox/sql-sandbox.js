@@ -303,7 +303,7 @@ export function createSqlSandboxFromEnv(env = process.env) {
     database: env.SQL_MENTOR_POSTGRES_DB || "sql_mentor",
     user: SANDBOX_ROLE,
     password: env.SQL_MENTOR_SANDBOX_PASSWORD,
-    application_name: "sql-mentor-ai-sandbox",
+    application_name: "dataforge-ai-lab-sandbox",
     connectionTimeoutMillis: 3_000,
     idleTimeoutMillis: 5_000,
     max: 2,

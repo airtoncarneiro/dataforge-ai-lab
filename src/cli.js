@@ -9,7 +9,7 @@ export const VERSION = "0.1.0";
 
 export function helpText() {
   return [
-    "SQL Mentor AI",
+    "DataForge AI Lab",
     "",
     "Uso:",
     "  npm start              inicia com o provider configurado",
@@ -24,7 +24,7 @@ export function helpText() {
 
 export function foundationStatus({ demo = false } = {}) {
   return [
-    "SQL Mentor AI — Terminal conversation loop B18",
+    "DataForge AI Lab — Terminal conversation loop B18",
     demo
       ? "LLM: provider demo determinístico (sem rede)."
       : "LLM: provider configurado pelo ambiente.",

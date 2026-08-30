@@ -32,7 +32,7 @@ test("web server conduz sessão, probe, prévia e submissão SQL", async (t) => 
 
   const health = await fetch(`${base}/health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: "ok", service: "sql-mentor-ai" });
+  assert.deepEqual(await health.json(), { status: "ok", service: "dataforge-ai-lab" });
 
   const page = await fetch(`${base}/`);
   assert.equal(page.status, 200);

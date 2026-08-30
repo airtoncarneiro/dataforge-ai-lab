@@ -56,7 +56,7 @@ export class TerminalConversationLoop {
   }
 
   async run({ resumeSessionId = null } = {}) {
-    this.#io.write("SQL Mentor AI — conversa de terminal B18");
+    this.#io.write("DataForge AI Lab — conversa de terminal B18");
     this.#io.write("Digite 'sair' a qualquer momento para encerrar.");
     let reason = "completed";
     try {

@@ -1,4 +1,4 @@
-# SQL Mentor AI
+# DataForge AI Lab
 
 Tutor adaptativo de SQL com avaliação baseada em execução real no PostgreSQL.
 

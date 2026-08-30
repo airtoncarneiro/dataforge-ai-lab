@@ -251,7 +251,7 @@ function formatInstructions(policy, phase) {
   const authority = policy.authority_boundaries.map((rule) => `- ${rule}`).join("\n");
 
   return [
-    "# SQL Mentor AI — Operational Tutor Policy",
+    "# DataForge AI Lab — Operational Tutor Policy",
     `Policy version: ${policy.version}`,
     `Conceptual source: ${policy.source.path}`,
     `Current phase: ${phase}`,

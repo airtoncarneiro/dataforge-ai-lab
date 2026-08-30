@@ -404,7 +404,7 @@ export function createPostgresSessionStoreFromEnv(env = process.env) {
     database: env.SQL_MENTOR_POSTGRES_DB || "sql_mentor",
     user: required(env.SQL_MENTOR_POSTGRES_USER, "SQL_MENTOR_POSTGRES_USER"),
     password: required(env.SQL_MENTOR_POSTGRES_PASSWORD, "SQL_MENTOR_POSTGRES_PASSWORD"),
-    application_name: "sql-mentor-ai-persistence",
+    application_name: "dataforge-ai-lab-persistence",
     connectionTimeoutMillis: 3_000,
     idleTimeoutMillis: 5_000,
     max: 2,

@@ -4,11 +4,11 @@ import { createTutorApplicationFromEnv } from "../orchestrator/index.js";
 
 const HTML = `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SQL Mentor AI</title>
+<title>DataForge AI Lab</title>
 <style>
 :root{font:16px system-ui,sans-serif;color:#17202a;background:#f6f8fa}body{max-width:920px;margin:0 auto;padding:28px 18px 56px}header,section,.card{background:#fff;border:1px solid #d9e0e6;border-radius:12px;padding:20px;margin:14px 0}h1,h2,h3{margin-top:0}.muted{color:#667085}.status{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.pill{background:#eef2ff;color:#3730a3;border-radius:999px;padding:5px 10px;font-size:.9rem}textarea,input{box-sizing:border-box;width:100%;border:1px solid #b8c2cc;border-radius:8px;padding:10px;font:inherit}textarea{min-height:130px;resize:vertical}#sql,code,pre{font-family:ui-monospace,SFMono-Regular,monospace}code{background:#eef2f7;border-radius:4px;padding:1px 4px}pre{background:#0f172a;color:#e5e7eb;border-radius:8px;overflow:auto;padding:12px}pre code{background:transparent;padding:0}button{border:0;border-radius:8px;padding:10px 15px;margin:8px 8px 0 0;font:inherit;cursor:pointer;background:#2563eb;color:#fff}button.secondary{background:#e5e7eb;color:#17202a}button:disabled{opacity:.55;cursor:wait}.hidden{display:none!important}.error{background:#fef2f2;color:#991b1b;border-color:#fecaca}.feedback{line-height:1.5}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border-bottom:1px solid #e5e7eb;text-align:left;padding:7px}
 </style></head>
-<body><header><h1>SQL Mentor AI</h1><div class="muted">Tutor adaptativo de SQL com execução controlada no PostgreSQL.</div><div id="status" class="status"><span class="pill">Sessão não iniciada</span></div></header>
+<body><header><h1>DataForge AI Lab</h1><div class="muted">Laboratório adaptativo para estudantes de engenharia de dados.</div><div id="status" class="status"><span class="pill">Sessão não iniciada</span></div></header>
 <section id="startPanel"><h2>Comece sua sessão</h2><label for="goal">O que você quer aprender?</label><input id="goal" value="Quero aprender SQL"><button id="start">Iniciar nova sessão</button><label for="resumeId">ID de outra sessão (opcional)</label><input id="resumeId" placeholder="learning-session:..."><button id="resume" class="secondary">Retomar última sessão</button></section>
 <section id="content" class="hidden"><h2 id="phaseTitle">Diagnóstico</h2><div id="busy" class="card hidden" role="status" aria-live="polite">Processando… aguarde.</div><div id="message" class="feedback"></div><div id="exercise" class="card hidden"></div><div id="progress" class="card hidden"></div><div id="error" class="card error hidden"></div><div id="inputPanel" class="card hidden"><label id="inputLabel" for="answer">Resposta</label><textarea id="answer" placeholder="Digite sua resposta"></textarea><button id="send">Enviar</button><button id="preview" class="secondary hidden">Testar SQL</button><button id="continue" class="hidden">Continuar</button></div><div id="executionResult" class="card hidden"></div></section>
 <script>
@@ -86,7 +86,7 @@ export function createMentorWebServer({ env = process.env, applicationFactory = 
     try {
       const url = new URL(request.url, "http://127.0.0.1");
       if (request.method === "GET" && url.pathname === "/") return send(response, 200, HTML, { "content-type": "text/html; charset=utf-8" });
-      if (request.method === "GET" && url.pathname === "/health") return send(response, 200, { status: "ok", service: "sql-mentor-ai" });
+      if (request.method === "GET" && url.pathname === "/health") return send(response, 200, { status: "ok", service: "dataforge-ai-lab" });
       if (request.method === "POST" && url.pathname === "/api/sessions") {
         const body = await jsonBody(request); const application = await applicationFactory({ env });
         const result = await application.start({ learningGoal: body.learning_goal ?? "Quero aprender SQL" }); const sessionId = result.session_id ?? result.session?.id;
@@ -118,4 +118,4 @@ export function createMentorWebServer({ env = process.env, applicationFactory = 
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) { await loadDotEnv(); const server = createMentorWebServer(); server.listen(Number(process.env.PORT ?? 3000), "127.0.0.1", () => console.log("SQL Mentor AI web em http://127.0.0.1:3000")); }
+if (import.meta.url === `file://${process.argv[1]}`) { await loadDotEnv(); const server = createMentorWebServer(); server.listen(Number(process.env.PORT ?? 3000), "127.0.0.1", () => console.log("DataForge AI Lab web em http://127.0.0.1:3000")); }

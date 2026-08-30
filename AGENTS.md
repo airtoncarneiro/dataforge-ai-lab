@@ -2,7 +2,7 @@
 
 ## Missão
 
-Implementar o MVP do SQL Mentor AI: um tutor adaptativo de SQL que avalia respostas usando execução real e controlada em PostgreSQL.
+Implementar o MVP do DataForge AI Lab: um tutor adaptativo de SQL que avalia respostas usando execução real e controlada em PostgreSQL.
 
 Leia antes de alterar código:
 
