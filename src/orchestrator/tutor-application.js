@@ -204,6 +204,20 @@ function exerciseAdaptiveDecision(session) {
     : session.last_decision;
 }
 
+function usedExerciseIds(session) {
+  return [...new Set([
+    ...session.attempts.map((attempt) => attempt.exercise_id),
+    session.current_exercise?.exercise.id,
+  ].filter(Boolean))];
+}
+
+function usedExerciseStatements(session) {
+  return [
+    ...session.exercise_history.map((exercise) => exercise.statement),
+    session.current_exercise?.exercise.statement,
+  ].filter(Boolean);
+}
+
 export class TutorApplication {
   #probeService;
   #phaseService;
@@ -357,6 +371,7 @@ export class TutorApplication {
       validations: [],
       evaluations: [],
       mastery_changes: [],
+      exercise_history: [],
       policy_version: TERMINAL_APPLICATION_POLICY_VERSION,
       created_at: at,
       updated_at: at,
@@ -492,7 +507,7 @@ export class TutorApplication {
         if (apply !== null) {
           const generated = await this.#exerciseService.generate({
             currentConcept, learnerState: this.#session.learner_state, targetDifficulty: this.#targetDifficulty,
-            pedagogicalContext: { phase: "APPLY", learning_goal: this.#session.learning_goal, integration_concepts: apply.integration_concepts, scenario_hint: "Crie um caso integrado que exija analisar, justificar e implementar uma consulta SQL.", recent_messages: [] },
+            pedagogicalContext: { phase: "APPLY", learning_goal: this.#session.learning_goal, integration_concepts: apply.integration_concepts, scenario_hint: "Crie um caso integrado que exija analisar, justificar e implementar uma consulta SQL.", recent_messages: [], used_exercise_ids: usedExerciseIds(this.#session), used_exercise_statements: usedExerciseStatements(this.#session) },
             adaptiveDecision: exerciseAdaptiveDecision(this.#session),
           });
           if (generated.status !== "ok") return createApplicationResult(this.#session, [createApplicationEvent("error", publicError(generated.error, { message: "Não foi possível preparar o caso integrado agora." }))]);
@@ -524,6 +539,8 @@ export class TutorApplication {
               integration_concepts: review.integration_concepts,
               scenario_hint: "Use recuperação ativa de conceitos anteriores no dataset educacional.",
               recent_messages: [],
+              used_exercise_ids: usedExerciseIds(this.#session),
+              used_exercise_statements: usedExerciseStatements(this.#session),
             },
             adaptiveDecision: exerciseAdaptiveDecision(this.#session),
           });
@@ -586,6 +603,8 @@ export class TutorApplication {
               integration_concepts: [],
               scenario_hint: "Use somente o dataset educacional disponível no PostgreSQL.",
               recent_messages: [],
+              used_exercise_ids: usedExerciseIds(this.#session),
+              used_exercise_statements: usedExerciseStatements(this.#session),
             },
             adaptiveDecision: exerciseAdaptiveDecision(this.#session),
           });
@@ -684,6 +703,10 @@ export class TutorApplication {
       ...this.#session,
       flow_state: flowState,
       attempts: [...this.#session.attempts, attempt],
+      exercise_history: [
+        ...this.#session.exercise_history,
+        { id: trusted.exercise.id, statement: trusted.exercise.statement },
+      ],
       updated_at: at,
     });
     this.#log("info", "attempt.submitted", {
@@ -752,7 +775,7 @@ export class TutorApplication {
           pedagogicalContext: {
             phase: "TRANSFER_TEST", learning_goal: this.#session.learning_goal,
             integration_concepts: trusted.exercise.concepts.filter((concept) => concept !== flowState.current_concept),
-            scenario_hint: "Crie um novo contexto de negócio, diferente do caso Apply, para verificar transferência dos mesmos princípios.", recent_messages: [],
+            scenario_hint: "Crie um novo contexto de negócio, diferente do caso Apply, para verificar transferência dos mesmos princípios.", recent_messages: [], used_exercise_ids: usedExerciseIds(this.#session), used_exercise_statements: usedExerciseStatements(this.#session),
           },
           adaptiveDecision: decision,
         });

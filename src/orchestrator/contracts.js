@@ -95,6 +95,18 @@ function integer(value, path) {
   return value;
 }
 
+function exerciseHistory(value, path) {
+  if (!Array.isArray(value)) fail("invalid_shape", `${path} deve ser um array.`);
+  return value.map((item, index) => {
+    const entry = record(item, `${path}[${index}]`);
+    exactKeys(entry, ["id", "statement"], `${path}[${index}]`);
+    return deepFreeze({
+      id: string(entry.id, `${path}[${index}].id`),
+      statement: string(entry.statement, `${path}[${index}].statement`),
+    });
+  });
+}
+
 function enumValue(value, allowed, path) {
   if (!allowed.includes(value)) {
     fail("invalid_value", `${path} deve ser um de: ${allowed.join(", ")}.`);
@@ -162,6 +174,7 @@ export function createTutorApplicationSession(input, path = "TutorApplicationSes
     "validations",
     "evaluations",
     "mastery_changes",
+    "exercise_history",
     "policy_version",
     "created_at",
     "updated_at",
@@ -237,6 +250,7 @@ export function createTutorApplicationSession(input, path = "TutorApplicationSes
       createMasteryChange,
       `${path}.mastery_changes`,
     ),
+    exercise_history: exerciseHistory(value.exercise_history ?? [], `${path}.exercise_history`),
     policy_version: TERMINAL_APPLICATION_POLICY_VERSION,
     created_at: createdAt,
     updated_at: updatedAt,

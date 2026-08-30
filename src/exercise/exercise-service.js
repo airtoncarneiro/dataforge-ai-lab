@@ -18,6 +18,7 @@ import {
   createExerciseGenerationResult,
   createGeneratedExercise,
 } from "./contracts.js";
+import { SELECT_FALLBACK_EXERCISES } from "./fallback-exercises.js";
 import { EXERCISE_GENERATION_OUTPUT_SCHEMA } from "./schemas.js";
 
 const EXERCISE_PHASES = Object.freeze([
@@ -153,6 +154,10 @@ function normalizeMessages(input, path) {
   }));
 }
 
+function normalizeExerciseStatement(value) {
+  return value.trim().replace(/\s+/gu, " ").toLocaleLowerCase("pt-BR");
+}
+
 function normalizePedagogicalContext(input, learnerState) {
   const value = record(input, "pedagogicalContext");
   exactKeys(value, [
@@ -161,6 +166,8 @@ function normalizePedagogicalContext(input, learnerState) {
     "integration_concepts",
     "scenario_hint",
     "recent_messages",
+    "used_exercise_ids",
+    "used_exercise_statements",
   ], "pedagogicalContext");
   const context = Object.freeze({
     phase: enumValue(value.phase, EXERCISE_PHASES, "pedagogicalContext.phase"),
@@ -179,6 +186,14 @@ function normalizePedagogicalContext(input, learnerState) {
       value.recent_messages,
       "pedagogicalContext.recent_messages",
     ),
+    used_exercise_ids: strings(
+      value.used_exercise_ids ?? [],
+      "pedagogicalContext.used_exercise_ids",
+    ),
+    used_exercise_statements: strings(
+      value.used_exercise_statements ?? [],
+      "pedagogicalContext.used_exercise_statements",
+    ).map(normalizeExerciseStatement),
   });
   if (context.learning_goal !== learnerState.learning_goal) {
     fail(
@@ -611,26 +626,41 @@ function generationFailure({ attempts, category, code, message, retryable }) {
   });
 }
 
-function deterministicFallback({ currentConcept, targetConcepts, difficulty, timestamp }) {
+function deterministicFallback({ currentConcept, targetConcepts, difficulty, timestamp, usedExerciseIds = [], usedExerciseStatements = [] }) {
   if (currentConcept !== "select" || targetConcepts.length !== 1) return null;
+  const usage = new Map(usedExerciseIds.map((id, index) => [id, index]));
+  const usedStatements = new Set(usedExerciseStatements);
+  if (usedExerciseIds.some((id) => ["fallback-select-2", "fallback-select-3"].includes(id))) {
+    usedStatements.add(normalizeExerciseStatement(SELECT_FALLBACK_EXERCISES[0].statement));
+  }
+  const candidate = SELECT_FALLBACK_EXERCISES
+    .map((exercise, index) => ({
+      exercise,
+      index,
+      lastUsed: usage.get(exercise.id) ?? -1,
+      statementUsed: usedStatements.has(normalizeExerciseStatement(exercise.statement)),
+    }))
+    .sort((left, right) => Number(left.statementUsed) - Number(right.statementUsed)
+      || left.lastUsed - right.lastUsed || left.index - right.index)[0]
+    .exercise;
   return createGeneratedExercise({
-    id: `fallback-${currentConcept}-${difficulty}`,
+    id: candidate.id,
     target_concepts: targetConcepts,
     difficulty,
-    objective: "Praticar a seleção de colunas específicas da tabela customers.",
-    statement: "Escreva uma consulta SQL para selecionar as colunas name e email de todos os registros da tabela customers.",
+    objective: candidate.objective,
+    statement: candidate.statement,
     expected_skills: ["select"],
     validation_strategy: "RESULT_SET",
     evaluation_notes: ["Verificar a projeção das colunas solicitadas."],
     created_at: timestamp,
     validation_metadata: {
-      expected_columns: ["name", "email"],
+      expected_columns: candidate.expected_columns,
       comparison_mode: "RESULT_SET",
       ordering_required: false,
       expected_row_count: null,
-      reference_query: "SELECT name, email FROM customers",
+      reference_query: candidate.reference_query,
       concepts_evaluated: ["select"],
-      source_relations: ["customers"],
+      source_relations: candidate.source_relations,
       constraints: [],
     },
   });
@@ -826,6 +856,9 @@ export class ExerciseService {
           knowledgeGraph: this.#knowledgeGraph,
           sqlPolicy: this.#sqlPolicy,
         });
+        if (context.used_exercise_statements.includes(normalizeExerciseStatement(generated.exercise.statement))) {
+          fail("duplicate_exercise", "A questão gerada repete um enunciado já apresentado nesta sessão.");
+        }
         return createExerciseGenerationResult({
           status: "ok",
           exercise: generated.exercise,
@@ -841,15 +874,18 @@ export class ExerciseService {
             ? error.code
             : "invalid_generated_exercise";
         if (attempts === this.#maxGenerationAttempts) {
-          const fallback = deterministicFallback({
+    const fallback = deterministicFallback({
             currentConcept,
             targetConcepts: selection.targetConcepts,
             difficulty,
-            timestamp,
-          });
+      timestamp,
+      usedExerciseIds: context.used_exercise_ids,
+      usedExerciseStatements: context.used_exercise_statements,
+    });
           if (fallback !== null && [
             "constraint_concept_mismatch",
             "reference_row_count_mismatch",
+            "duplicate_exercise",
           ].includes(lastValidationCode)) {
             return createExerciseGenerationResult({
               status: "ok",

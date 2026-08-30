@@ -753,3 +753,51 @@ test("contexto B12 permanece estruturado e tools ficam vazias", async () => {
   assert.deepEqual(request.tools, []);
   assert.match(request.instructions, /Do not execute SQL/u);
 });
+
+test("fallback seleciona uma questão ainda não usada na sessão", async () => {
+  const invalid = outputFor({
+    constraints: [{
+      kind: "query_structure",
+      target: "query.has_where",
+      operator: "equals",
+      value: true,
+    }],
+  });
+  const { service } = serviceFor([
+    { type: "valid", output: invalid },
+    { type: "valid", output: invalid },
+  ], { maxGenerationAttempts: 1 });
+
+  const first = await generate(service, {
+    pedagogicalContext: pedagogicalContext({ used_exercise_ids: [] }),
+  });
+  const second = await generate(service, {
+    pedagogicalContext: pedagogicalContext({
+      used_exercise_ids: [first.exercise.id],
+    }),
+  });
+
+  assert.equal(first.status, "ok");
+  assert.equal(second.status, "ok");
+  assert.notEqual(first.exercise.id, second.exercise.id);
+  assert.notEqual(first.exercise.statement, second.exercise.statement);
+});
+
+test("fallback rejeita enunciado repetido mesmo quando a LLM usa outro ID", async () => {
+  const repeated = outputFor({
+    id: "llm-new-id",
+    statement: "Escreva uma consulta SQL para selecionar as colunas name e email de todos os registros da tabela customers.",
+    expectedColumns: ["name", "email"],
+    referenceQuery: "SELECT name, email FROM customers",
+  });
+  const { service } = serviceFor([{ type: "valid", output: repeated }], { maxGenerationAttempts: 1 });
+
+  const result = await generate(service, {
+    pedagogicalContext: pedagogicalContext({
+      used_exercise_statements: [repeated.statement],
+    }),
+  });
+
+  assert.equal(result.status, "ok");
+  assert.notEqual(result.exercise.statement, repeated.statement);
+});
