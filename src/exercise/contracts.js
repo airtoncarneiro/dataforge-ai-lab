@@ -128,6 +128,17 @@ function scalar(value, path) {
   fail("invalid_value", `${path} deve ser um escalar JSON.`);
 }
 
+function constraintValue(value, kind, path) {
+  // Structured output providers can serialize boolean constraint values as
+  // strings. Query-structure facts are always boolean, so normalize only the
+  // two canonical spellings at this trusted metadata boundary.
+  if (kind === "query_structure" && typeof value === "string") {
+    if (value.toLowerCase() === "true") return true;
+    if (value.toLowerCase() === "false") return false;
+  }
+  return scalar(value, path);
+}
+
 function deepFreeze(value) {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     Object.freeze(value);
@@ -149,7 +160,7 @@ function createValidationConstraint(input, path) {
       VALIDATION_CONSTRAINT_OPERATORS,
       `${path}.operator`,
     ),
-    value: scalar(value.value, `${path}.value`),
+    value: constraintValue(value.value, value.kind, `${path}.value`),
   });
 }
 
@@ -330,4 +341,3 @@ export function assertLearnerState(input) {
     throw error;
   }
 }
-

@@ -185,6 +185,25 @@ export class PostgresSessionStore {
     return cloneSnapshot(session);
   }
 
+  async loadLatestSessionSnapshot() {
+    const result = await this.#pool.query(
+      `SELECT s.payload
+         FROM app_state.tutor_session_snapshots s
+         JOIN app_state.tutor_learning_sessions l ON l.session_id = s.session_id
+        ORDER BY l.updated_at DESC
+        LIMIT 1`,
+    );
+    if (result.rowCount === 0) throw new SessionNotFoundError("latest");
+    try {
+      const session = assertSessionSnapshot(result.rows[0].payload);
+      await this.#assertNormalizedRows(session);
+      return cloneSnapshot(session);
+    } catch (error) {
+      if (error instanceof PersistenceError) throw error;
+      throw new CorruptSessionSnapshotError("latest");
+    }
+  }
+
   async saveLearnerState(sessionId, learnerState) {
     return this.#patchSnapshot(sessionId, { learner_state: learnerState });
   }

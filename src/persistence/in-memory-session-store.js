@@ -41,6 +41,13 @@ export class InMemorySessionStore {
     return this.getSession(sessionId);
   }
 
+  async loadLatestSessionSnapshot() {
+    const snapshots = [...this.#snapshots.values()]
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    if (snapshots.length === 0) throw new SessionNotFoundError("latest");
+    return cloneSnapshot(snapshots[0]);
+  }
+
   async saveLearnerState(sessionId, learnerState) {
     return this.#replace(sessionId, { learner_state: learnerState });
   }

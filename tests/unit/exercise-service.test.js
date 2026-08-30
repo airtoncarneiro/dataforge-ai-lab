@@ -7,6 +7,7 @@ import {
   EXERCISE_POLICY_VERSION,
   ExerciseService,
   ExerciseValidationError,
+  createExerciseValidationMetadata,
   exerciseDifficultyFor,
   toLearnerExercise,
 } from "../../src/exercise/index.js";
@@ -409,6 +410,26 @@ test("rejeita constraint estrutural não suportada e regenera", async () => {
   assert.equal(result.attempts, 2);
   const correction = JSON.parse(provider.calls[1].messages.at(-1).content);
   assert.equal(correction.rejected_code, "unsupported_constraint");
+});
+
+test("normaliza booleano textual de constraint estrutural", async () => {
+  const metadata = createExerciseValidationMetadata({
+    expected_columns: ["name", "unit_price"],
+    comparison_mode: "RESULT_SET",
+    ordering_required: false,
+    expected_row_count: null,
+    reference_query: "SELECT name, unit_price FROM products WHERE unit_price > 50.00",
+    concepts_evaluated: ["where"],
+    source_relations: ["products"],
+    constraints: [{
+      kind: "query_structure",
+      target: "query.has_where",
+      operator: "equals",
+      value: "true",
+    }],
+  });
+
+  assert.equal(metadata.constraints[0].value, true);
 });
 
 test("rejeita reference_solution no payload proposto pela LLM", async () => {

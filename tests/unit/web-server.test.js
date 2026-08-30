@@ -65,3 +65,17 @@ test("web server conduz sessão, probe, prévia e submissão SQL", async (t) => 
   });
   assert.equal(submitted.status, 200);
 });
+
+test("web server permite responder probe após retomar sessão", async (t) => {
+  const session = { id: "probe-session", phase: "PROBE", flow_state: { phase: "PROBE" } };
+  const application = {
+    session,
+    async resume(id) { return result(session, [{ type: "session_resumed", data: { session_id: id, phase: "PROBE", message: "Sessão recuperada." } }, { type: "probe_question", data: { number: 2, max_questions: 8, question: "Pergunta pendente" } }]); },
+  };
+  const server = createMentorWebServer({ applicationFactory: async () => application });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const address = server.address();
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/sessions/probe-session/resume`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  assert.equal(response.status, 200);
+});

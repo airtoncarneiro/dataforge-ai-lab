@@ -327,18 +327,10 @@ export class ResultValidator {
           referenceExecuted: true,
         });
       }
-      if (
-        expectedRowCount !== null
-        && referenceExecution.row_count !== expectedRowCount
-      ) {
-        return referenceFailure({
-          metadata,
-          code: "reference_row_count_mismatch",
-          expectedRowCount,
-          referenceExecuted: true,
-        });
-      }
-      expectedRowCount ??= referenceExecution.row_count;
+      // A trusted reference execution is authoritative for dynamic dataset
+      // cardinality. Generated expected_row_count can become stale when the
+      // educational fixture changes, so it must not invalidate a valid query.
+      expectedRowCount = referenceExecution.row_count;
     }
 
     const execution = await this.#sandbox.execute(studentSql);

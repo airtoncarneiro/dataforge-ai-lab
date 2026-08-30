@@ -278,6 +278,30 @@ test("query equivalente com sintaxe diferente é aceita", async () => {
   assert.equal(result.status, "correct");
 });
 
+test("WHERE com comparador numérico estrito é aceito", async () => {
+  const referenceQuery = "SELECT name, unit_price FROM products WHERE unit_price > 50.00";
+  const result = await validate({
+    exerciseInput: exercise({ concepts: ["where"] }),
+    metadataInput: metadata({
+      columns: ["name", "unit_price"],
+      referenceQuery,
+      concepts: ["where"],
+      sourceRelations: ["products"],
+      constraints: [{
+        kind: "query_structure",
+        target: "query.has_where",
+        operator: "equals",
+        value: true,
+      }],
+    }),
+    studentSql: referenceQuery,
+  });
+
+  assert.equal(result.status, "correct");
+  assert.equal(result.constraints[0].actual, true);
+  assert.equal(result.constraints[0].passed, true);
+});
+
 test("resultado coincidentemente correto é rejeitado sem JOIN exigido", async () => {
   const result = await validate({
     exerciseInput: exercise({ concepts: ["join"] }),
@@ -420,4 +444,3 @@ test("resultado integrado não vaza reference query, segredo ou stack", async ()
 
   assert.doesNotMatch(serialized, /SELECT customer_id|reference_query|password|postgres:\/\/|stack/iu);
 });
-

@@ -309,11 +309,32 @@ export class TutorApplication {
     );
     this.#sessionPersisted = true;
     this.#log("info", "session.recovered", { status: "ok" });
-    return createApplicationResult(this.#session, [createApplicationEvent("session_resumed", {
+    const events = [createApplicationEvent("session_resumed", {
       session_id: this.#session.id,
       phase: this.#session.flow_state.phase,
       message: "Sessão recuperada do estado persistido.",
-    })]);
+    })];
+    if (this.#session.flow_state.phase === "PROBE") events.push(probeQuestionEvent(this.#session.probe_session));
+    return createApplicationResult(this.#session, events);
+  }
+
+  async resumeLatest() {
+    if (this.#session !== null) fail("session_exists", "Já existe uma sessão em memória.");
+    if (this.#sessionStore === null || typeof this.#sessionStore.loadLatestSessionSnapshot !== "function") {
+      fail("persistence_unavailable", "Não existe store configurado para retomar a última sessão.");
+    }
+    this.#session = createTutorApplicationSession(
+      await this.#sessionStore.loadLatestSessionSnapshot(),
+    );
+    this.#sessionPersisted = true;
+    this.#log("info", "session.recovered", { status: "ok" });
+    const events = [createApplicationEvent("session_resumed", {
+      session_id: this.#session.id,
+      phase: this.#session.flow_state.phase,
+      message: "Última sessão recuperada do estado persistido.",
+    })];
+    if (this.#session.flow_state.phase === "PROBE") events.push(probeQuestionEvent(this.#session.probe_session));
+    return createApplicationResult(this.#session, events);
   }
 
   async start({ learningGoal }) {

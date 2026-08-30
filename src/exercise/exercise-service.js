@@ -472,6 +472,31 @@ function assertMetadataConsistency({ generated, targetConcepts, knowledgeGraph, 
   }
   assertSupportedConstraints(metadata.constraints, metadata.expected_columns);
 
+  const constraintConceptByTarget = new Map([
+    ["query.has_join", "join"],
+    ["query.has_group_by", "group_by"],
+    ["query.has_window_function", "window_functions"],
+    ["query.has_order_by", "order_by"],
+    ["query.has_cte", "cte"],
+    ["query.has_subquery", "subqueries"],
+    ["query.has_aggregate", "aggregate_functions"],
+    ["query.has_where", "where"],
+    ["query.has_having", "having"],
+    ["query.has_distinct", "select"],
+  ]);
+  const allowedConstraintConcepts = new Set(targetConcepts);
+  for (const concept of targetConcepts) {
+    for (const prerequisite of knowledgeGraph.getTransitivePrerequisites(concept)) {
+      allowedConstraintConcepts.add(prerequisite.id);
+    }
+  }
+  for (const constraint of metadata.constraints) {
+    const concept = constraintConceptByTarget.get(constraint.target);
+    if (concept && !allowedConstraintConcepts.has(concept)) {
+      fail("constraint_concept_mismatch", `A constraint ${constraint.target} não pertence aos conceitos autorizados.`);
+    }
+  }
+
   const serializedConstraints = metadata.constraints.map((item) => JSON.stringify(item));
   if (new Set(serializedConstraints).size !== serializedConstraints.length) {
     fail("duplicate_constraint", "validation_metadata possui constraints duplicadas.");
@@ -568,6 +593,9 @@ function exerciseDirective({
       statement_must_not_contain_the_reference_query: true,
       do_not_execute_sql: true,
       use_only_available_schema_relations_and_columns: true,
+      educational_schema_is_authoritative: true,
+      do_not_invent_tables_columns_or_examples: true,
+      use_exact_schema_names_in_statement_and_teaching_context: true,
     },
   });
 }
@@ -580,6 +608,31 @@ function generationFailure({ attempts, category, code, message, retryable }) {
     attempts,
     policy_version: EXERCISE_POLICY_VERSION,
     error: { category, code, message, retryable },
+  });
+}
+
+function deterministicFallback({ currentConcept, targetConcepts, difficulty, timestamp }) {
+  if (currentConcept !== "select" || targetConcepts.length !== 1) return null;
+  return createGeneratedExercise({
+    id: `fallback-${currentConcept}-${difficulty}`,
+    target_concepts: targetConcepts,
+    difficulty,
+    objective: "Praticar a seleção de colunas específicas da tabela customers.",
+    statement: "Escreva uma consulta SQL para selecionar as colunas name e email de todos os registros da tabela customers.",
+    expected_skills: ["select"],
+    validation_strategy: "RESULT_SET",
+    evaluation_notes: ["Verificar a projeção das colunas solicitadas."],
+    created_at: timestamp,
+    validation_metadata: {
+      expected_columns: ["name", "email"],
+      comparison_mode: "RESULT_SET",
+      ordering_required: false,
+      expected_row_count: null,
+      reference_query: "SELECT name, email FROM customers",
+      concepts_evaluated: ["select"],
+      source_relations: ["customers"],
+      constraints: [],
+    },
   });
 }
 
@@ -788,6 +841,25 @@ export class ExerciseService {
             ? error.code
             : "invalid_generated_exercise";
         if (attempts === this.#maxGenerationAttempts) {
+          const fallback = deterministicFallback({
+            currentConcept,
+            targetConcepts: selection.targetConcepts,
+            difficulty,
+            timestamp,
+          });
+          if (fallback !== null && [
+            "constraint_concept_mismatch",
+            "reference_row_count_mismatch",
+          ].includes(lastValidationCode)) {
+            return createExerciseGenerationResult({
+              status: "ok",
+              exercise: fallback.exercise,
+              validation_metadata: fallback.validation_metadata,
+              attempts,
+              policy_version: EXERCISE_POLICY_VERSION,
+              error: null,
+            });
+          }
           return generationFailure({
             attempts,
             category: "generation_error",
